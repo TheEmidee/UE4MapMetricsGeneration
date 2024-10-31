@@ -24,5 +24,6 @@ private:
         FString ScreenshotPattern;
     };
 
+    bool RunPerfGrapher( const FString & package_name, const FMetricsParams & metrics_params ) const;
     bool ParseParams( const FString & params, FMetricsParams & out_params, TMap< FString, FString > & params_map ) const;
 };
