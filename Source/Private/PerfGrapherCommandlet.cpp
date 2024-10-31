@@ -105,7 +105,7 @@ int32 UPerfGrapherCommandlet::Main( const FString & params )
 
     if ( package_names.Num() == 0 )
     {
-        UE_LOG( LogPerfGrapher, Erro r, TEXT( "No maps were checked" ) );
+        UE_LOG( LogPerfGrapher, Error, TEXT( "No maps were checked" ) );
         return 2;
     }
 
