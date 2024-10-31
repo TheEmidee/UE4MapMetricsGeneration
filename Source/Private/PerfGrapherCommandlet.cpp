@@ -2,6 +2,7 @@
 
 #include "Chaos/AABB.h"
 #include "Dom/JsonObject.h"
+#include "Misc/OutputDevice.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 
@@ -46,31 +47,86 @@ int32 UPerfGrapherCommandlet::Main( const FString & params )
     UE_LOG( LogPerfGrapher, Log, TEXT( "--------------------------------------------------------------------------------------------" ) );
     UE_LOG( LogPerfGrapher, Log, TEXT( "Running MapMetricsGeneration Commandlet" ) );
 
-    if ( FMetricsParams metrics_params; !ParseParams( params, metrics_params ) )
+    TMap< FString, FString > params_map;
+    FMetricsParams metrics_params;
+
+    if ( !ParseParams( params, metrics_params, params_map ) )
     {
+        UE_LOG( LogPerfGrapher, Error, TEXT( "Failed to parse parameters" ) );
         return 1;
+    }
+
+    TArray< FString > package_names;
+
+    for ( const auto & param_key_pair : params_map )
+    {
+        if ( param_key_pair.Key == "Map" )
+        {
+            auto map_parameter_value = param_key_pair.Value;
+
+            const auto add_package = [ &package_names ]( const FString & package_name ) {
+                FString map_file;
+                FPackageName::SearchForPackageOnDisk( package_name, nullptr, &map_file );
+
+                if ( map_file.IsEmpty() )
+                {
+                    UE_LOG( LogPerfGrapher, Error, TEXT( "Could not find package %s" ), *package_name );
+                }
+                else
+                {
+                    package_names.Add( *map_file );
+                }
+            };
+
+            add_package( map_parameter_value );
+        }
+    }
+
+    if ( package_names.Num() == 0 )
+    {
+        UE_LOG( LogPerfGrapher, Error, TEXT( "No maps were checked" ) );
+        return 2;
+    }
+
+    for ( const auto & package_name : package_names )
+    {
+        auto * package = LoadPackage( nullptr, *package_name, 0 );
+        if ( package == nullptr )
+        {
+            UE_LOG( LogPerfGrapher, Error, TEXT( "Could not load package %s" ), *package_name );
+            return 2;
+        }
+
+        auto * world = UWorld::FindWorldInPackage( package );
+        if ( world == nullptr )
+        {
+            UE_LOG( LogPerfGrapher, Error, TEXT( "Could not get a world in the package %s" ), *package_name );
+            return 2;
+        }
+
+        world->WorldType = EWorldType::Editor;
     }
     return 0;
 }
 
-bool UPerfGrapherCommandlet::ParseParams( const FString & params_str, FMetricsParams & out_params ) const
+bool UPerfGrapherCommandlet::ParseParams( const FString & params, FMetricsParams & out_params, TMap< FString, FString > & params_map ) const
 {
     TArray< FString > tokens;
     TArray< FString > switches;
-    TMap< FString, FString > params_map;
-    ParseCommandLine( *params_str, tokens, switches, params_map );
+    ParseCommandLine( *params, tokens, switches, params_map );
 
     // Log initial parameters
     UE_LOG( LogPerfGrapher, Display, TEXT( "Parsing commandlet parameters:" ) );
-    UE_LOG( LogPerfGrapher, Display, TEXT( "Raw params: %s" ), *params_str );
+    UE_LOG( LogPerfGrapher, Display, TEXT( "Raw params: %s" ), *params );
     UE_LOG( LogPerfGrapher, Display, TEXT( "Found %d tokens, %d switches, %d params" ), tokens.Num(), switches.Num(), params_map.Num() );
 
     for ( const auto & param : params_map )
     {
-        UE_LOG( LogPerfGrapher, Display, TEXT( "Param: %s = %s" ), *param.Key, *param.Value );
+        UE_LOG( LogPerfGrapher, Display, TEXT( "In Param: %s = %s" ), *param.Key, *param.Value );
     }
 
     // Set defaults before parsing overrides
+    out_params.MapName = TEXT( "L_OW" );
     out_params.CellSize = 1000.0f;
     out_params.GridOffset = FVector::ZeroVector;
     out_params.CameraHeight = 170.0f;
@@ -79,21 +135,26 @@ bool UPerfGrapherCommandlet::ParseParams( const FString & params_str, FMetricsPa
     out_params.ScreenshotPattern = TEXT( "screenshot_%d_%d_%d" );
 
     // Override with passed parameters
+    if ( params_map.Contains( TEXT( "Map" ) ) )
+    {
+        out_params.MapName = params_map[ TEXT( "Map" ) ];
+    }
+
     if ( params_map.Contains( TEXT( "CellSize" ) ) )
     {
         out_params.CellSize = FCString::Atof( *params_map[ TEXT( "CellSize" ) ] );
     }
     if ( params_map.Contains( TEXT( "GridOffset" ) ) )
     {
-        FString GridOffset = params_map[ TEXT( "GridOffset" ) ];
-        TArray< FString > Components;
-        GridOffset.ParseIntoArray( Components, TEXT( "," ) );
-        if ( Components.Num() == 3 )
+        const auto grid_offset = params_map[ TEXT( "GridOffset" ) ];
+        TArray< FString > components;
+        grid_offset.ParseIntoArray( components, TEXT( "," ) );
+        if ( components.Num() == 3 )
         {
             out_params.GridOffset = FVector(
-                FCString::Atof( *Components[ 0 ] ),
-                FCString::Atof( *Components[ 1 ] ),
-                FCString::Atof( *Components[ 2 ] ) );
+                FCString::Atof( *components[ 0 ] ),
+                FCString::Atof( *components[ 1 ] ),
+                FCString::Atof( *components[ 2 ] ) );
         }
     }
 
@@ -118,13 +179,10 @@ bool UPerfGrapherCommandlet::ParseParams( const FString & params_str, FMetricsPa
     }
 
     // Log final values
-    UE_LOG( LogPerfGrapher, Display, TEXT( "Final parameter values:" ) );
-    UE_LOG( LogPerfGrapher, Display, TEXT( "CellSize: %.1f" ), out_params.CellSize );
-    UE_LOG( LogPerfGrapher, Display, TEXT( "GridOffset: X=%.1f Y=%.1f Z=%.1f" ), out_params.GridOffset.X, out_params.GridOffset.Y, out_params.GridOffset.Z );
-    UE_LOG( LogPerfGrapher, Display, TEXT( "CameraHeight: %.1f" ), out_params.CameraHeight );
-    UE_LOG( LogPerfGrapher, Display, TEXT( "CameraHeightOffset: %.1f" ), out_params.CameraHeightOffset );
-    UE_LOG( LogPerfGrapher, Display, TEXT( "CameraRotationDelta: %.1f" ), out_params.CameraRotationDelta );
-    UE_LOG( LogPerfGrapher, Display, TEXT( "ScreenshotPattern: %s" ), *out_params.ScreenshotPattern );
+    for ( const auto & param : params_map )
+    {
+        UE_LOG( LogPerfGrapher, Display, TEXT( "Out Param: %s = %s" ), *param.Key, *param.Value );
+    }
 
     return true;
 }

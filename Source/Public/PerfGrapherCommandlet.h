@@ -15,6 +15,7 @@ public:
 private:
     struct FMetricsParams
     {
+        FString MapName;
         float CellSize;
         FVector GridOffset;
         float CameraHeight;
@@ -23,5 +24,5 @@ private:
         FString ScreenshotPattern;
     };
 
-    bool ParseParams( const FString & ParamsStr, FMetricsParams & OutParams ) const;
+    bool ParseParams( const FString & params, FMetricsParams & out_params, TMap< FString, FString > & params_map ) const;
 };
