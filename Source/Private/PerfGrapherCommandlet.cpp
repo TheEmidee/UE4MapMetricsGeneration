@@ -3,15 +3,18 @@
 #include "Chaos/AABB.h"
 #include "Dom/JsonObject.h"
 #include "Misc/OutputDevice.h"
+#include "PerfGrapherObserver.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+#include "WorldPartition/WorldPartition.h"
 
 #include <Editor.h>
 #include <Engine/LevelStreaming.h>
 #include <Engine/World.h>
 #include <Misc/PackageName.h>
 // ReSharper disable once CppInconsistentNaming
-DEFINE_LOG_CATEGORY_STATIC( LogPerfGrapher, Verbose, All )
+// DEFINE_LOG_CATEGORY_STATIC( LogPerfGrapher, Verbose, All )
+DEFINE_LOG_CATEGORY_STATIC( LogPerfGrapher, Log, All );
 
 UPerfGrapherCommandlet::UPerfGrapherCommandlet()
 {
@@ -45,7 +48,7 @@ UPerfGrapherCommandlet::UPerfGrapherCommandlet()
 int32 UPerfGrapherCommandlet::Main( const FString & params )
 {
     UE_LOG( LogPerfGrapher, Log, TEXT( "--------------------------------------------------------------------------------------------" ) );
-    UE_LOG( LogPerfGrapher, Log, TEXT( "Running MapMetricsGeneration Commandlet" ) );
+    UE_LOG( LogPerfGrapher, Log, TEXT( "Running PerfGrapher Commandlet" ) );
 
     TMap< FString, FString > params_map;
     FMetricsParams metrics_params;
@@ -55,6 +58,7 @@ int32 UPerfGrapherCommandlet::Main( const FString & params )
         UE_LOG( LogPerfGrapher, Error, TEXT( "Failed to parse parameters" ) );
         return 1;
     }
+    UE_LOG( LogPerfGrapher, Log, TEXT( "Parameters parsed successfully" ) );
 
     TArray< FString > package_names;
 
@@ -63,6 +67,7 @@ int32 UPerfGrapherCommandlet::Main( const FString & params )
         if ( param_key_pair.Key == "Map" )
         {
             auto map_parameter_value = param_key_pair.Value;
+            UE_LOG( LogPerfGrapher, Log, TEXT( "Processing map: %s" ), *map_parameter_value );
 
             const auto add_package = [ &package_names ]( const FString & package_name ) {
                 FString map_file;
@@ -74,39 +79,126 @@ int32 UPerfGrapherCommandlet::Main( const FString & params )
                 }
                 else
                 {
+                    UE_LOG( LogPerfGrapher, Log, TEXT( "Found package file: %s" ), *map_file );
                     package_names.Add( *map_file );
                 }
             };
 
-            add_package( map_parameter_value );
+            TArray< FString > maps_package_names;
+            map_parameter_value.ParseIntoArray( maps_package_names, TEXT( "+" ) );
+
+            if ( maps_package_names.Num() > 0 )
+            {
+                for ( const auto & map_package_name : maps_package_names )
+                {
+                    add_package( map_package_name );
+                }
+            }
+            else
+            {
+                add_package( map_parameter_value );
+            }
         }
     }
 
+    UE_LOG( LogPerfGrapher, Log, TEXT( "Found %d packages to process" ), package_names.Num() );
+
     if ( package_names.Num() == 0 )
     {
-        UE_LOG( LogPerfGrapher, Error, TEXT( "No maps were checked" ) );
+        UE_LOG( LogPerfGrapher, Erro r, TEXT( "No maps were checked" ) );
         return 2;
     }
 
     for ( const auto & package_name : package_names )
     {
-        auto * package = LoadPackage( nullptr, *package_name, 0 );
-        if ( package == nullptr )
+        UE_LOG( LogPerfGrapher, Log, TEXT( "Processing package: %s" ), *package_name );
+        if ( !RunPerfGrapher( package_name, metrics_params ) )
         {
-            UE_LOG( LogPerfGrapher, Error, TEXT( "Could not load package %s" ), *package_name );
-            return 2;
+            UE_LOG( LogPerfGrapher, Error, TEXT( "Failed to process map %s" ), *package_name );
+            return 1;
         }
-
-        auto * world = UWorld::FindWorldInPackage( package );
-        if ( world == nullptr )
-        {
-            UE_LOG( LogPerfGrapher, Error, TEXT( "Could not get a world in the package %s" ), *package_name );
-            return 2;
-        }
-
-        world->WorldType = EWorldType::Editor;
     }
+
+    UE_LOG( LogPerfGrapher, Log, TEXT( "All packages processed successfully" ) );
     return 0;
+}
+
+bool UPerfGrapherCommandlet::RunPerfGrapher( const FString & package_name, const FMetricsParams & metrics_params ) const
+{
+    // Load the world package
+    auto * package = LoadPackage( nullptr, *package_name, LOAD_None );
+    if ( package == nullptr )
+    {
+        UE_LOG( LogPerfGrapher, Error, TEXT( "Cannot load package %s" ), *package_name );
+        return false;
+    }
+    UE_LOG( LogPerfGrapher, Log, TEXT( "Package %s loaded" ), *package_name );
+
+    // Get world from package
+    auto * world = UWorld::FindWorldInPackage( package );
+    if ( world == nullptr )
+    {
+        UE_LOG( LogPerfGrapher, Error, TEXT( "Cannot get a world in the package %s" ), *package_name );
+        return false;
+    }
+    UE_LOG( LogPerfGrapher, Log, TEXT( "World %s found" ), *world->GetName() );
+
+    // Initialize World Partition if it exists
+    if ( world->GetWorldPartition() )
+    {
+        UE_LOG( LogPerfGrapher, Log, TEXT( "World Partition found, initializing..." ) );
+        world->GetWorldPartition()->Initialize( world, FTransform::Identity );
+    }
+    UE_LOG( LogPerfGrapher, Log, TEXT( "World Partition initialized" ) );
+
+    // Load World
+    world->WorldType = EWorldType::Editor;
+    world->AddToRoot();
+
+    if ( !world->bIsWorldInitialized )
+    {
+        UWorld::InitializationValues ivs;
+        ivs.RequiresHitProxies( false );
+        ivs.ShouldSimulatePhysics( false );
+        ivs.EnableTraceCollision( false );
+        ivs.CreateNavigation( false );
+        ivs.CreateAISystem( false );
+        ivs.AllowAudioPlayback( false );
+        ivs.CreatePhysicsScene( true );
+
+        world->InitWorld( ivs );
+        world->PersistentLevel->UpdateModelComponents();
+        world->UpdateWorldComponents( true, false );
+    }
+    UE_LOG( LogPerfGrapher, Log, TEXT( "World %s initialized" ), *world->GetName() );
+
+    // Spawn observer
+    const auto * observer = world->SpawnActor< APerfGrapherObserver >( FVector::ZeroVector, FRotator::ZeroRotator );
+
+    UE_LOG( LogPerfGrapher, Log, TEXT( "Attempting to spawn observer..." ) );
+    if ( observer == nullptr )
+    {
+        UE_LOG( LogPerfGrapher, Error, TEXT( "Failed to spawn observer" ) );
+        return false;
+    }
+    UE_LOG( LogPerfGrapher, Log, TEXT( "Observer spawned successfully at location %s" ), *observer->GetActorLocation().ToString() );
+
+    // Cleanup
+    if ( world->GetWorldPartition() )
+    {
+        world->GetWorldPartition()->Uninitialize();
+    }
+
+    world->CleanupWorld();
+    world->RemoveFromRoot();
+    world->FlushLevelStreaming( EFlushLevelStreamingType::Full );
+    UE_LOG( LogPerfGrapher, Log, TEXT( "World %s cleaned up" ), *world->GetName() );
+
+    // Force garbage collection to clean up
+    CollectGarbage( GARBAGE_COLLECTION_KEEPFLAGS );
+    UE_LOG( LogPerfGrapher, Log, TEXT( "Garbage collection completed" ) );
+
+    return true;
 }
 
 bool UPerfGrapherCommandlet::ParseParams( const FString & params, FMetricsParams & out_params, TMap< FString, FString > & params_map ) const
