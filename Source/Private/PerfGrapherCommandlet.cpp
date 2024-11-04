@@ -178,7 +178,7 @@ bool UPerfGrapherCommandlet::RunPerfGrapher( const FString & package_name, const
         UE_LOG( LogPerfGrapher, Error, TEXT( "Failed to spawn observer" ) );
         return false;
     }
-    UE_LOG( LogPerfGrapher, Log, TEXT( "Observer spawned successfully at location %s" ), *observer->GetActorLocation().ToString() );
+    UE_LOG( LogPerfGrapher, Log, TEXT( "Observer spawned successfully at location %s" ), *collector->GetActorLocation().ToString() );
 
     // :NOTE: Cleanup
     if ( world->GetWorldPartition() )
