@@ -1,17 +1,15 @@
 #include "PerfGrapherCommandlet.h"
 
-#include "Chaos/AABB.h"
-#include "Dom/JsonObject.h"
-#include "LevelStatsCollector.h"
-#include "Misc/OutputDevice.h"
-#include "Serialization/JsonSerializer.h"
-#include "Serialization/JsonWriter.h"
-#include "WorldPartition/WorldPartition.h"
-
+#include <Dom/JsonObject.h>
 #include <Editor.h>
 #include <Engine/LevelStreaming.h>
 #include <Engine/World.h>
+#include <LevelStatsCollector.h>
+#include <Misc/OutputDevice.h>
 #include <Misc/PackageName.h>
+#include <Serialization/JsonSerializer.h>
+#include <Serialization/JsonWriter.h>
+#include <WorldPartition/WorldPartition.h>
 // :NOTE: ReSharper disable once CppInconsistentNaming
 DEFINE_LOG_CATEGORY_STATIC( LogPerfGrapher, Verbose, All )
 
@@ -171,11 +169,11 @@ bool UPerfGrapherCommandlet::RunPerfGrapher( const FString & package_name, const
     }
     UE_LOG( LogPerfGrapher, Log, TEXT( "World %s initialized" ), *world->GetName() );
 
-    // :NOTE: Spawn observer
-    const auto * observer = world->SpawnActor< ALevelStatsCollector >( FVector::ZeroVector, FRotator::ZeroRotator );
+    // :NOTE: Spawn collector
+    const auto * collector = world->SpawnActor< ALevelStatsCollector >( FVector::ZeroVector, FRotator::ZeroRotator );
 
     UE_LOG( LogPerfGrapher, Log, TEXT( "Attempting to spawn observer..." ) );
-    if ( observer == nullptr )
+    if ( collector == nullptr )
     {
         UE_LOG( LogPerfGrapher, Error, TEXT( "Failed to spawn observer" ) );
         return false;
