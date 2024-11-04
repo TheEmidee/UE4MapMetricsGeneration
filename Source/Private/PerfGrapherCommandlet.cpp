@@ -2,8 +2,8 @@
 
 #include "Chaos/AABB.h"
 #include "Dom/JsonObject.h"
+#include "LevelStatsCollector.h"
 #include "Misc/OutputDevice.h"
-#include "PerfGrapherObserver.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "WorldPartition/WorldPartition.h"
@@ -172,7 +172,7 @@ bool UPerfGrapherCommandlet::RunPerfGrapher( const FString & package_name, const
     UE_LOG( LogPerfGrapher, Log, TEXT( "World %s initialized" ), *world->GetName() );
 
     // :NOTE: Spawn observer
-    const auto * observer = world->SpawnActor< APerfGrapherObserver >( FVector::ZeroVector, FRotator::ZeroRotator );
+    const auto * observer = world->SpawnActor< ALevelStatsCollector >( FVector::ZeroVector, FRotator::ZeroRotator );
 
     UE_LOG( LogPerfGrapher, Log, TEXT( "Attempting to spawn observer..." ) );
     if ( observer == nullptr )
