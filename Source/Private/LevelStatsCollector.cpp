@@ -1,14 +1,28 @@
 ﻿#include "LevelStatsCollector.h"
 
 #include <Components/SceneCaptureComponent2D.h>
+#include <Engine/LevelBounds.h>
 #include <Engine/TextureRenderTarget2D.h>
-#include <Engine/World.h>
 #include <ImageUtils.h>
-#include <Kismet/GameplayStatics.h>
 
-ALevelStatsCollector::ALevelStatsCollector()
+ALevelStatsCollector::ALevelStatsCollector() :
+    CellSize( 10000.0f ),
+    GridCenterOffset( FVector::ZeroVector ),
+    CameraHeight( 10000.0f ),
+    CameraHeightOffset( 250.0f ),
+    CameraRotationDelta( 90.0f ),
+    CaptureDelay( 0.1f ),
+    OutputDirectory( TEXT( "Saved/Screenshots/LevelStatsCollector/" ) ),
+    CurrentCellIndex( 0 ),
+    CurrentRotation( 0.0f ),
+    CurrentCaptureDelay( 0.0f ),
+    TotalCaptureCount( 0 ),
+    bIsCapturing( false ),
+    bIsInitialized( false )
+
 {
     PrimaryActorTick.bCanEverTick = true;
+
     CaptureComponent = CreateDefaultSubobject< USceneCaptureComponent2D >( TEXT( "CaptureComponent" ) );
     RootComponent = CaptureComponent;
 }
@@ -22,104 +36,131 @@ void ALevelStatsCollector::PostInitializeComponents()
 void ALevelStatsCollector::BeginPlay()
 {
     Super::BeginPlay();
-
-    CalculateGridBounds();
-    CurrentCell = GridMin;
-    CurrentRotation = 0.0f;
-    CurrentCaptureCount = 0;
-    bIsCapturing = true;
-
-    ProcessNextCell();
+    InitializeGrid();
 }
 
 void ALevelStatsCollector::Tick( float delta_time )
 {
     Super::Tick( delta_time );
 
-    if ( !bIsCapturing )
-        return;
-
-    // Take the next capture after a small delay to ensure previous capture is complete
-    static float delay = 0.1f;
-    static float current_delay = 0.0f;
-
-    current_delay += delta_time;
-    if ( current_delay >= delay )
+    if ( !bIsCapturing || !bIsInitialized )
     {
-        current_delay = 0.0f;
+        return;
+    }
+
+    // :NOTE: Take the next capture after a small delay to ensure previous capture is complete
+    CurrentCaptureDelay += delta_time;
+    if ( CurrentCaptureDelay >= CaptureDelay )
+    {
+        CurrentCaptureDelay = 0.0f;
         CaptureCurrentView();
 
-        // Rotate for next capture or move to next cell
         CurrentRotation += CameraRotationDelta;
         if ( CurrentRotation >= 360.0f )
         {
             CurrentRotation = 0.0f;
-            if ( !MoveToNextPosition() )
+            if ( !MoveToNextCell() )
             {
                 bIsCapturing = false;
-                UE_LOG( LogTemp, Log, TEXT( "Capture process complete!" ) );
+                UE_LOG( LogTemp, Log, TEXT( "Capture process complete! Total captures: %d" ), TotalCaptureCount );
             }
         }
 
-        // Update capture component rotation
-        const FRotator new_rotation( 0.0f, CurrentRotation, 0.0f );
-        CaptureComponent->SetRelativeRotation( new_rotation );
+        CaptureComponent->SetRelativeRotation( FRotator( 0.0f, CurrentRotation, 0.0f ) );
     }
 }
 
 void ALevelStatsCollector::SetupSceneCapture() const
 {
-    if ( CaptureComponent )
+    if ( !CaptureComponent )
     {
-        // Create render target
-        UTextureRenderTarget2D * render_target = NewObject< UTextureRenderTarget2D >();
-        render_target->InitCustomFormat( 1920, 1080, PF_B8G8R8A8, true ); // HD resolution
-        render_target->UpdateResource();
-
-        // Setup capture component
-        CaptureComponent->CaptureSource = SCS_FinalColorLDR;
-        CaptureComponent->TextureTarget = render_target;
-        CaptureComponent->FOVAngle = 90.0f; // Standard FPS FOV
-        CaptureComponent->bCaptureEveryFrame = false;
+        UE_LOG( LogTemp, Error, TEXT( "CaptureComponent is not set!" ) );
+        return;
     }
+
+    auto * render_target = NewObject< UTextureRenderTarget2D >();
+    render_target->InitCustomFormat( 1920, 1080, PF_B8G8R8A8, false );
+    render_target->TargetGamma = 2.2f;
+    render_target->UpdateResource();
+
+    CaptureComponent->CaptureSource = SCS_FinalColorLDR;
+    CaptureComponent->TextureTarget = render_target;
+    CaptureComponent->FOVAngle = 90.0f;
+    CaptureComponent->bCaptureEveryFrame = false;
 }
 
-void ALevelStatsCollector::ProcessNextCell()
+void ALevelStatsCollector::InitializeGrid()
 {
-    const FVector trace_start = CurrentCell + FVector( 0, 0, CameraHeight );
-    FVector hit_location;
+    CalculateGridBounds();
 
-    if ( TraceGroundPosition( trace_start, hit_location ) )
+    // :NOTE: Calculate total number of cells and initialize grid
+    const auto total_cells = GridDimensions.X * GridDimensions.Y;
+    GridCells.Empty( total_cells );
+
+    // :NOTE: Initialize grid cells
+    for ( int32 y = 0; y < GridDimensions.Y; ++y )
     {
-        // Position camera at hit location + offset
-        const FVector camera_location = hit_location + FVector( 0, 0, CameraHeightOffset );
+        for ( int32 x = 0; x < GridDimensions.X; ++x )
+        {
+            FGridCell cell;
+            cell.Center = GridBounds.Min + FVector( x * CellSize + CellSize / 2, y * CellSize + CellSize / 2, 0.0f );
+            GridCells.Add( cell );
+        }
+    }
+
+    CurrentCellIndex = 0;
+    CurrentRotation = 0.0f;
+    bIsCapturing = true;
+    bIsInitialized = true;
+
+    LogGridInfo();
+    ProcessNextCell();
+}
+
+bool ALevelStatsCollector::ProcessNextCell()
+{
+    if ( !GridCells.IsValidIndex( CurrentCellIndex ) )
+    {
+        return false;
+    }
+
+    auto & current_cell = GridCells[ CurrentCellIndex ];
+    if ( current_cell.bProcessed )
+    {
+        return MoveToNextCell();
+    }
+
+    const auto trace_start = current_cell.Center + FVector( 0, 0, CameraHeight );
+
+    if ( FVector hit_location; TraceGroundPosition( trace_start, hit_location ) )
+    {
+        current_cell.GroundHeight = hit_location.Z;
+        const auto camera_location = hit_location + FVector( 0, 0, CameraHeightOffset );
         SetActorLocation( camera_location );
 
-        // Reset rotation for new cell
         CurrentRotation = 0.0f;
-        const FRotator new_rotation( 0.0f, CurrentRotation, 0.0f );
-        CaptureComponent->SetRelativeRotation( new_rotation );
+        CaptureComponent->SetRelativeRotation( FRotator::ZeroRotator );
+        return true;
     }
+
+    UE_LOG( LogTemp, Warning, TEXT( "Failed to find ground position for cell at %s" ), *current_cell.Center.ToString() );
+    return MoveToNextCell();
 }
 
 void ALevelStatsCollector::CaptureCurrentView()
 {
     if ( !CaptureComponent || !CaptureComponent->TextureTarget )
     {
+        UE_LOG( LogTemp, Error, TEXT( "Invalid capture component or render target!" ) );
         return;
     }
 
-    // Generate filename based on position and rotation
-    const auto file_name = FString::Printf( TEXT( "/Game/Captures/capture_%lld_%lld_%lld_rot_%d" ),
-        FMath::RoundToInt( CurrentCell.X ),
-        FMath::RoundToInt( CurrentCell.Y ),
-        FMath::RoundToInt( CurrentCell.Z ),
-        FMath::RoundToInt( CurrentRotation ) );
+    const auto file_name = GenerateFileName();
 
-    // Capture the view
+    // :NOTE: Capture the view
     CaptureComponent->CaptureScene();
 
-    // Get the captured image
+    // :NOTE: Get the captured image
     FImage image;
     if ( !FImageUtils::GetRenderTargetImage( Cast< UTextureRenderTarget >( CaptureComponent->TextureTarget ), image ) )
     {
@@ -127,16 +168,17 @@ void ALevelStatsCollector::CaptureCurrentView()
         return;
     }
 
-    // Ensure screenshots directory exists
-    const FString screenshot_dir = FPaths::ProjectDir() + TEXT( "Saved/Screenshots/" );
+    // :NOTE: Ensure screenshots directory exists
+    const auto screenshot_dir = FPaths::ProjectDir() + OutputDirectory;
     IFileManager::Get().MakeDirectory( *screenshot_dir, true );
 
-    // Save as PNG file
-    const FString screenshot_path = screenshot_dir + file_name + TEXT( ".png" );
+    // :NOTE: For now, Save as PNG file with unique (non normalized) name
+    const auto screenshot_path = screenshot_dir + file_name + TEXT( ".png" );
     if ( FImageUtils::SaveImageByExtension( *screenshot_path, image ) )
     {
-        UE_LOG( LogTemp, Log, TEXT( "Captured view saved: %s" ), *file_name );
-        CurrentCaptureCount++;
+        const auto & current_cell = GridCells[ CurrentCellIndex ];
+        UE_LOG( LogTemp, Log, TEXT( "Image captured at coordinates (%f, %f, %f), with name: %s" ), current_cell.Center.X, current_cell.Center.Y, current_cell.Center.Z, *file_name );
+        TotalCaptureCount++;
     }
     else
     {
@@ -147,12 +189,12 @@ void ALevelStatsCollector::CaptureCurrentView()
 bool ALevelStatsCollector::TraceGroundPosition( const FVector & start_location, FVector & outhit_location ) const
 {
     FHitResult hit_result;
-    const FVector end_location = start_location - FVector( 0, 0, CameraHeight * 2 );
+    const auto end_location = start_location - FVector( 0, 0, CameraHeight * 2 );
 
-    FCollisionQueryParams QueryParams;
-    QueryParams.AddIgnoredActor( this );
+    FCollisionQueryParams query_params;
+    query_params.AddIgnoredActor( this );
 
-    if ( GetWorld()->LineTraceSingleByChannel( hit_result, start_location, end_location, ECC_Visibility, QueryParams ) )
+    if ( GetWorld()->LineTraceSingleByChannel( hit_result, start_location, end_location, ECC_Visibility, query_params ) )
     {
         outhit_location = hit_result.Location;
         return true;
@@ -163,51 +205,140 @@ bool ALevelStatsCollector::TraceGroundPosition( const FVector & start_location, 
 
 void ALevelStatsCollector::CalculateGridBounds()
 {
-    // Calculate bounds based on all visible geometry in the level
     FBox level_bounds( ForceInit );
+    bool bounds_found = false;
 
-    // Collect all visible static meshes in the level
-    TArray< AActor * > found_actors;
-    UGameplayStatics::GetAllActorsOfClass( GetWorld(), AActor::StaticClass(), found_actors );
-
-    for ( AActor * actor : found_actors )
+    // :NOTE: Use explicit grid dimensions if provided
+    if ( GridSizeX > 0.0f && GridSizeY > 0.0f )
     {
-        if ( actor && actor != this )
+        const auto half_size_x = GridSizeX * 0.5f;
+        const auto half_size_y = GridSizeY * 0.5f;
+
+        level_bounds = FBox(
+            FVector( -half_size_x, -half_size_y, 0.0f ),
+            FVector( half_size_x, half_size_y, 0.0f ) );
+        bounds_found = true;
+
+        UE_LOG( LogTemp, Log, TEXT( "Using explicit grid dimensions: %f x %f" ), GridSizeX, GridSizeY );
+    }
+
+    // :NOTE: Use LevelBoundsActor if no explicit dimensions provided
+    if ( !bounds_found )
+    {
+        if ( const ULevel * current_level = GetWorld()->GetCurrentLevel() )
         {
-            level_bounds += actor->GetComponentsBoundingBox();
+            if ( const ALevelBounds * level_bounds_actor = current_level->LevelBoundsActor.Get() )
+            {
+                level_bounds = level_bounds_actor->GetComponentsBoundingBox( true );
+                bounds_found = ( level_bounds.IsValid != 0 );
+
+                if ( bounds_found )
+                {
+                    UE_LOG( LogTemp, Log, TEXT( "Got bounds from LevelBoundsActor: %s" ), *level_bounds.ToString() );
+                }
+            }
         }
     }
 
-    const FVector Origin = level_bounds.GetCenter();
-    const FVector Extent = level_bounds.GetExtent();
-
-    // Calculate grid bounds based on cell size
-    GridMin = FVector(
-                  FMath::FloorToFloat( Origin.X - Extent.X ) / CellSize * CellSize,
-                  FMath::FloorToFloat( Origin.Y - Extent.Y ) / CellSize * CellSize,
-                  0 ) +
-              GridOffset;
-
-    GridMax = FVector(
-                  FMath::CeilToFloat( Origin.X + Extent.X ) / CellSize * CellSize,
-                  FMath::CeilToFloat( Origin.Y + Extent.Y ) / CellSize * CellSize,
-                  0 ) +
-              GridOffset;
-}
-
-bool ALevelStatsCollector::MoveToNextPosition()
-{
-    CurrentCell.X += CellSize;
-
-    if ( CurrentCell.X > GridMax.X )
+    // :NOTE: Use default area if no bounds found
+    if ( !bounds_found || level_bounds.IsValid == 0 )
     {
-        CurrentCell.X = GridMin.X;
-        CurrentCell.Y += CellSize;
-
-        if ( CurrentCell.Y > GridMax.Y )
-            return false;
+        UE_LOG( LogTemp, Warning, TEXT( "No valid bounds source found, using default 10000x10000 area" ) );
+        level_bounds = FBox( FVector( -5000, -5000, 0 ), FVector( 5000, 5000, 0 ) ); // :NOTE: Arbitrary default area
     }
 
-    ProcessNextCell();
-    return true;
+    // :NOTE: Add padding to ensure we capture the edges properly
+    const auto bounds_padding = CellSize * 0.5f;
+    level_bounds = level_bounds.ExpandBy( FVector( bounds_padding, bounds_padding, 0 ) );
+
+    // :NOTE: Calculate grid bounds ensuring alignment with CellSize
+    const auto origin = level_bounds.GetCenter();
+    const auto extent = level_bounds.GetExtent();
+
+    // :NOTE: Calculate initial grid bounds
+    GridBounds.Min = FVector(
+                         FMath::FloorToFloat( origin.X - extent.X ) / CellSize * CellSize,
+                         FMath::FloorToFloat( origin.Y - extent.Y ) / CellSize * CellSize,
+                         0 ) +
+                     GridCenterOffset;
+
+    GridBounds.Max = FVector(
+                         FMath::CeilToFloat( origin.X + extent.X ) / CellSize * CellSize,
+                         FMath::CeilToFloat( origin.Y + extent.Y ) / CellSize * CellSize,
+                         0 ) +
+                     GridCenterOffset;
+
+    // :NOTE: Calculate and validate grid dimensions
+    const auto grid_size = GridBounds.Max - GridBounds.Min;
+    GridDimensions = FIntPoint(
+        FMath::CeilToInt( grid_size.X / CellSize ),
+        FMath::CeilToInt( grid_size.Y / CellSize ) );
+
+    // :NOTE: Ensure cell alignment
+    const auto expected_size_x = GridDimensions.X * CellSize;
+    const auto expected_size_y = GridDimensions.Y * CellSize;
+    const auto actual_size_x = grid_size.X;
+    const auto actual_size_y = grid_size.Y;
+
+    if ( !FMath::IsNearlyEqual( expected_size_x, actual_size_x, KINDA_SMALL_NUMBER ) ||
+         !FMath::IsNearlyEqual( expected_size_y, actual_size_y, KINDA_SMALL_NUMBER ) )
+    {
+        GridBounds.Max = GridBounds.Min + FVector( expected_size_x, expected_size_y, 0.0f );
+
+        UE_LOG( LogTemp, Warning, TEXT( "Grid size adjusted for cell alignment. Original: (%f, %f), Adjusted: (%f, %f)" ), actual_size_x, actual_size_y, expected_size_x, expected_size_y );
+    }
+
+    // :NOTE: Store the actual sizes back to our parameters
+    GridSizeX = expected_size_x;
+    GridSizeY = expected_size_y;
+}
+
+bool ALevelStatsCollector::MoveToNextCell()
+{
+    if ( !GridCells.IsValidIndex( CurrentCellIndex ) )
+    {
+        return false;
+    }
+
+    GridCells[ CurrentCellIndex ].bProcessed = true;
+    CurrentCellIndex++;
+
+    if ( CurrentCellIndex >= GridCells.Num() )
+    {
+        return false;
+    }
+
+    return ProcessNextCell();
+}
+
+FString ALevelStatsCollector::GenerateFileName() const
+{
+    if ( !GridCells.IsValidIndex( CurrentCellIndex ) )
+    {
+        return TEXT( "invalid_capture" );
+    }
+
+    const FGridCell & current_cell = GridCells[ CurrentCellIndex ];
+    return FString::Printf( TEXT( "capture_%lld_%lld_%lld_rot_%d" ),
+        FMath::RoundToInt( current_cell.Center.X ),
+        FMath::RoundToInt( current_cell.Center.Y ),
+        FMath::RoundToInt( current_cell.Center.Z ),
+        FMath::RoundToInt( CurrentRotation ) );
+}
+
+void ALevelStatsCollector::LogGridInfo() const
+{
+    UE_LOG( LogTemp, Log, TEXT( "Grid Configuration:" ) );
+    UE_LOG( LogTemp, Log, TEXT( "  Bounds: Min(%s), Max(%s)" ), *GridBounds.Min.ToString(), *GridBounds.Max.ToString() );
+    UE_LOG( LogTemp, Log, TEXT( "  Dimensions: %dx%d cells" ), GridDimensions.X, GridDimensions.Y );
+    UE_LOG( LogTemp, Log, TEXT( "  Cell Size: %f" ), CellSize );
+    UE_LOG( LogTemp, Log, TEXT( "  Total Cells: %d" ), GridCells.Num() );
+    UE_LOG( LogTemp, Log, TEXT( "  Center Offset: %s" ), *GridCenterOffset.ToString() );
+    UE_LOG( LogTemp, Log, TEXT( "Camera Configuration:" ) );
+    UE_LOG( LogTemp, Log, TEXT( "  Height: %f" ), CameraHeight );
+    UE_LOG( LogTemp, Log, TEXT( "  Height Offset: %f" ), CameraHeightOffset );
+    UE_LOG( LogTemp, Log, TEXT( "  Rotation Delta: %f" ), CameraRotationDelta );
+    UE_LOG( LogTemp, Log, TEXT( "Capture Configuration:" ) );
+    UE_LOG( LogTemp, Log, TEXT( "  Capture Delay: %f" ), CaptureDelay );
+    UE_LOG( LogTemp, Log, TEXT( "  Output Directory: %s" ), *OutputDirectory );
 }

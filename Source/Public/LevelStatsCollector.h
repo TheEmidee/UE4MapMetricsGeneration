@@ -4,6 +4,22 @@
 
 #include "LevelStatsCollector.generated.h"
 
+USTRUCT()
+struct FGridCell
+{
+    GENERATED_BODY()
+
+    FVector Center;
+    float GroundHeight;
+    bool bProcessed;
+
+    FGridCell() :
+        Center( FVector::ZeroVector ),
+        GroundHeight( 0.0f ),
+        bProcessed( false )
+    {}
+};
+
 UCLASS()
 class MAPMETRICSGENERATION_API ALevelStatsCollector final : public AActor
 {
@@ -17,37 +33,55 @@ public:
     void Tick( float DeltaTime ) override;
 
 private:
+    void InitializeGrid();
     void SetupSceneCapture() const;
-    void ProcessNextCell();
+    bool ProcessNextCell();
     void CaptureCurrentView();
-    bool TraceGroundPosition( const FVector & start_location, FVector & outhit_location ) const;
+    bool TraceGroundPosition( const FVector & start_location, FVector & out_hit_location ) const;
     void CalculateGridBounds();
-    bool MoveToNextPosition();
-
-    UPROPERTY()
-    USceneCaptureComponent2D * CaptureComponent;
+    bool MoveToNextCell();
+    FString GenerateFileName() const;
+    void LogGridInfo() const;
 
 public:
     UPROPERTY()
-    float CellSize = 1000.0f;
+    float GridSizeX;
 
     UPROPERTY()
-    FVector GridOffset = FVector::ZeroVector;
+    float GridSizeY;
 
     UPROPERTY()
-    float CameraHeight = 10000.0f;
+    float CellSize;
 
     UPROPERTY()
-    float CameraHeightOffset = 170.0f;
+    FVector GridCenterOffset;
 
     UPROPERTY()
-    float CameraRotationDelta = 90.0f;
+    float CameraHeight;
+
+    UPROPERTY()
+    float CameraHeightOffset;
+
+    UPROPERTY()
+    float CameraRotationDelta;
+
+    UPROPERTY( EditAnywhere, Category = "Capture Configuration" )
+    float CaptureDelay;
+
+    UPROPERTY( EditAnywhere, Category = "Capture Configuration" )
+    FString OutputDirectory;
 
 private:
-    FVector CurrentCell;
+    UPROPERTY()
+    USceneCaptureComponent2D * CaptureComponent;
+
+    TArray< FGridCell > GridCells;
+    int32 CurrentCellIndex;
     float CurrentRotation;
-    FVector GridMin;
-    FVector GridMax;
-    int32 CurrentCaptureCount;
+    float CurrentCaptureDelay;
+    FBox GridBounds;
+    FIntPoint GridDimensions;
+    int32 TotalCaptureCount;
     bool bIsCapturing;
+    bool bIsInitialized;
 };
