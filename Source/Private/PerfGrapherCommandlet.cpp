@@ -217,7 +217,7 @@ bool UPerfGrapherCommandlet::ParseParams( const FString & params, FMetricsParams
     }
 
     // :NOTE: Set defaults before parsing overrides
-    out_params.MapName = TEXT( "L_OW" );
+    out_params.MapName = TEXT( "default_map" ); // :NOTE: This is a placeholder you can edit to set a default map
     out_params.CellSize = 1000.0f;
     out_params.GridOffset = FVector::ZeroVector;
     out_params.CameraHeight = 170.0f;
