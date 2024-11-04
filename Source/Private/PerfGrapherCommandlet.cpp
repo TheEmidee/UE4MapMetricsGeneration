@@ -12,9 +12,8 @@
 #include <Engine/LevelStreaming.h>
 #include <Engine/World.h>
 #include <Misc/PackageName.h>
-// ReSharper disable once CppInconsistentNaming
-// DEFINE_LOG_CATEGORY_STATIC( LogPerfGrapher, Verbose, All )
-DEFINE_LOG_CATEGORY_STATIC( LogPerfGrapher, Log, All );
+// :NOTE: ReSharper disable once CppInconsistentNaming
+DEFINE_LOG_CATEGORY_STATIC( LogPerfGrapher, Verbose, All )
 
 UPerfGrapherCommandlet::UPerfGrapherCommandlet()
 {
@@ -24,7 +23,7 @@ UPerfGrapherCommandlet::UPerfGrapherCommandlet()
     LogToConsole = true;
     ShowErrorCount = true;
 
-    // Set up commandlet help info
+    // :NOTE: Set up commandlet help info
     HelpDescription = TEXT( "Generate metrics and screenshots for a map using a grid system" );
     HelpUsage = TEXT( "<MapName> -CellSize=<size> [-GridOffset=X,Y,Z] [-CameraHeight=<height>] [-CameraHeightOffset=<offset>] [-CameraRotationDelta=<angle>] [-ScreenshotPattern=<pattern>]" );
 
@@ -125,7 +124,7 @@ int32 UPerfGrapherCommandlet::Main( const FString & params )
 
 bool UPerfGrapherCommandlet::RunPerfGrapher( const FString & package_name, const FMetricsParams & metrics_params ) const
 {
-    // Load the world package
+    // :NOTE: Load the world package
     auto * package = LoadPackage( nullptr, *package_name, LOAD_None );
     if ( package == nullptr )
     {
@@ -134,7 +133,7 @@ bool UPerfGrapherCommandlet::RunPerfGrapher( const FString & package_name, const
     }
     UE_LOG( LogPerfGrapher, Log, TEXT( "Package %s loaded" ), *package_name );
 
-    // Get world from package
+    // :NOTE: Get world from package
     auto * world = UWorld::FindWorldInPackage( package );
     if ( world == nullptr )
     {
@@ -143,7 +142,7 @@ bool UPerfGrapherCommandlet::RunPerfGrapher( const FString & package_name, const
     }
     UE_LOG( LogPerfGrapher, Log, TEXT( "World %s found" ), *world->GetName() );
 
-    // Initialize World Partition if it exists
+    // :NOTE: Initialize World Partition if it exists
     if ( world->GetWorldPartition() )
     {
         UE_LOG( LogPerfGrapher, Log, TEXT( "World Partition found, initializing..." ) );
@@ -151,7 +150,7 @@ bool UPerfGrapherCommandlet::RunPerfGrapher( const FString & package_name, const
     }
     UE_LOG( LogPerfGrapher, Log, TEXT( "World Partition initialized" ) );
 
-    // Load World
+    // :NOTE: Load World
     world->WorldType = EWorldType::Editor;
     world->AddToRoot();
 
@@ -172,7 +171,7 @@ bool UPerfGrapherCommandlet::RunPerfGrapher( const FString & package_name, const
     }
     UE_LOG( LogPerfGrapher, Log, TEXT( "World %s initialized" ), *world->GetName() );
 
-    // Spawn observer
+    // :NOTE: Spawn observer
     const auto * observer = world->SpawnActor< APerfGrapherObserver >( FVector::ZeroVector, FRotator::ZeroRotator );
 
     UE_LOG( LogPerfGrapher, Log, TEXT( "Attempting to spawn observer..." ) );
@@ -183,7 +182,7 @@ bool UPerfGrapherCommandlet::RunPerfGrapher( const FString & package_name, const
     }
     UE_LOG( LogPerfGrapher, Log, TEXT( "Observer spawned successfully at location %s" ), *observer->GetActorLocation().ToString() );
 
-    // Cleanup
+    // :NOTE: Cleanup
     if ( world->GetWorldPartition() )
     {
         world->GetWorldPartition()->Uninitialize();
@@ -194,7 +193,7 @@ bool UPerfGrapherCommandlet::RunPerfGrapher( const FString & package_name, const
     world->FlushLevelStreaming( EFlushLevelStreamingType::Full );
     UE_LOG( LogPerfGrapher, Log, TEXT( "World %s cleaned up" ), *world->GetName() );
 
-    // Force garbage collection to clean up
+    // :NOTE: Force garbage collection to clean up
     CollectGarbage( GARBAGE_COLLECTION_KEEPFLAGS );
     UE_LOG( LogPerfGrapher, Log, TEXT( "Garbage collection completed" ) );
 
@@ -207,7 +206,7 @@ bool UPerfGrapherCommandlet::ParseParams( const FString & params, FMetricsParams
     TArray< FString > switches;
     ParseCommandLine( *params, tokens, switches, params_map );
 
-    // Log initial parameters
+    // :NOTE: Log initial parameters
     UE_LOG( LogPerfGrapher, Display, TEXT( "Parsing commandlet parameters:" ) );
     UE_LOG( LogPerfGrapher, Display, TEXT( "Raw params: %s" ), *params );
     UE_LOG( LogPerfGrapher, Display, TEXT( "Found %d tokens, %d switches, %d params" ), tokens.Num(), switches.Num(), params_map.Num() );
@@ -217,7 +216,7 @@ bool UPerfGrapherCommandlet::ParseParams( const FString & params, FMetricsParams
         UE_LOG( LogPerfGrapher, Display, TEXT( "In Param: %s = %s" ), *param.Key, *param.Value );
     }
 
-    // Set defaults before parsing overrides
+    // :NOTE: Set defaults before parsing overrides
     out_params.MapName = TEXT( "L_OW" );
     out_params.CellSize = 1000.0f;
     out_params.GridOffset = FVector::ZeroVector;
@@ -226,7 +225,7 @@ bool UPerfGrapherCommandlet::ParseParams( const FString & params, FMetricsParams
     out_params.CameraRotationDelta = 90.0f;
     out_params.ScreenshotPattern = TEXT( "screenshot_%d_%d_%d" );
 
-    // Override with passed parameters
+    // :NOTE: Override with passed parameters
     if ( params_map.Contains( TEXT( "Map" ) ) )
     {
         out_params.MapName = params_map[ TEXT( "Map" ) ];
@@ -270,7 +269,7 @@ bool UPerfGrapherCommandlet::ParseParams( const FString & params, FMetricsParams
         out_params.ScreenshotPattern = params_map[ TEXT( "ScreenshotPattern" ) ];
     }
 
-    // Log final values
+    // :NOTE: Log final values
     for ( const auto & param : params_map )
     {
         UE_LOG( LogPerfGrapher, Display, TEXT( "Out Param: %s = %s" ), *param.Key, *param.Value );
