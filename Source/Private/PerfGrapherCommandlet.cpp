@@ -1,7 +1,5 @@
 #include "PerfGrapherCommandlet.h"
 
-#include "WorldHandler.h"
-
 #include <Dom/JsonObject.h>
 #include <Editor.h>
 #include <Engine/LevelStreaming.h>
@@ -11,8 +9,83 @@
 #include <Misc/PackageName.h>
 #include <Serialization/JsonSerializer.h>
 #include <Serialization/JsonWriter.h>
+#include <WorldPartition/WorldPartition.h>
 // :NOTE: ReSharper disable once CppInconsistentNaming
 DEFINE_LOG_CATEGORY_STATIC( LogPerfGrapher, Verbose, All )
+
+class FWorldHandler
+{
+public:
+    explicit FWorldHandler( UWorld * world ) :
+        World( world )
+    {
+        if ( World != nullptr )
+        {
+            Initialize();
+        }
+    }
+    ~FWorldHandler()
+    {
+        Cleanup();
+    }
+
+    FWorldHandler( const FWorldHandler & ) = delete;
+    FWorldHandler & operator=( const FWorldHandler & ) = delete;
+
+    UWorld * GetWorld() const;
+
+private:
+    void Initialize() const
+    {
+        // :NOTE: Initialize World Partition if it exists
+        if ( World->GetWorldPartition() )
+        {
+            World->GetWorldPartition()->Initialize( World, FTransform::Identity );
+        }
+
+        // :NOTE: Setup world
+        World->WorldType = EWorldType::Editor;
+        World->AddToRoot();
+
+        if ( !World->bIsWorldInitialized )
+        {
+            UWorld::InitializationValues IVs;
+            IVs.RequiresHitProxies( true )
+                .ShouldSimulatePhysics( true )
+                .EnableTraceCollision( true )
+                .CreateNavigation( true )
+                .CreateAISystem( true )
+                .AllowAudioPlayback( true )
+                .CreatePhysicsScene( true );
+
+            World->InitWorld( IVs );
+            World->PersistentLevel->UpdateModelComponents();
+            World->UpdateWorldComponents( true, false );
+        }
+    }
+
+    void Cleanup() const
+    {
+        if ( World->GetWorldPartition() )
+        {
+            World->GetWorldPartition()->Uninitialize();
+        }
+
+        World->CleanupWorld();
+        World->RemoveFromRoot();
+        World->FlushLevelStreaming( EFlushLevelStreamingType::Full );
+
+        // :NOTE: Force garbage collection
+        CollectGarbage( GARBAGE_COLLECTION_KEEPFLAGS );
+    }
+
+    UWorld * World;
+};
+
+FORCEINLINE UWorld * FWorldHandler::GetWorld() const
+{
+    return World;
+}
 
 UPerfGrapherCommandlet::UPerfGrapherCommandlet()
 {
