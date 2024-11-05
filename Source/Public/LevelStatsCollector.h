@@ -20,7 +20,6 @@ private:
     void InitializeGrid();
     void SetupSceneCapture() const;
     bool ProcessNextCell();
-    bool MoveToNextCell();
     void CaptureCurrentView();
     TOptional< FVector > TraceGroundPosition( const FVector & start_location ) const;
     void CalculateGridBounds();
