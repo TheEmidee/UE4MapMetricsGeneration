@@ -58,8 +58,8 @@ void ALevelStatsCollector::Tick( float delta_time )
         CurrentRotation += CameraRotationDelta;
         if ( CurrentRotation >= 360.0f )
         {
-            CurrentRotation = 0.0f;
-            if ( !MoveToNextCell() )
+            CurrentCellIndex++;
+            if ( !ProcessNextCell() )
             {
                 bIsCapturing = false;
                 UE_LOG( LogTemp, Log, TEXT( "Capture process complete! Total captures: %d" ), TotalCaptureCount );
@@ -98,13 +98,11 @@ void ALevelStatsCollector::InitializeGrid()
     GridCells.Empty( total_cells );
 
     // :NOTE: Initialize grid cells
-    for ( int32 y = 0; y < GridDimensions.Y; ++y )
+    for ( auto y = 0; y < GridDimensions.Y; ++y )
     {
-        for ( int32 x = 0; x < GridDimensions.X; ++x )
+        for ( auto x = 0; x < GridDimensions.X; ++x )
         {
-            FGridCell cell;
-            cell.Center = GridBounds.Min + FVector( x * CellSize + CellSize / 2, y * CellSize + CellSize / 2, 0.0f );
-            GridCells.Add( cell );
+            GridCells.Emplace( GridBounds.Min + FVector( x * CellSize + CellSize / 2, y * CellSize + CellSize / 2, 0.0f ) );
         }
     }
 
@@ -125,31 +123,28 @@ bool ALevelStatsCollector::ProcessNextCell()
     }
 
     auto & current_cell = GridCells[ CurrentCellIndex ];
-    if ( current_cell.bProcessed )
-    {
-        return MoveToNextCell();
-    }
-
     const auto trace_start = current_cell.Center + FVector( 0, 0, CameraHeight );
 
-    if ( FVector hit_location; TraceGroundPosition( trace_start, hit_location ) )
+    if ( const auto hit_location = TraceGroundPosition( trace_start ) )
     {
-        current_cell.GroundHeight = hit_location.Z;
-        const auto camera_location = hit_location + FVector( 0, 0, CameraHeightOffset );
+        // :NOTE: Set up the new cell position and reset rotation
+        current_cell.GroundHeight = hit_location.GetValue().Z;
+        const auto camera_location = hit_location.GetValue() + FVector( 0, 0, CameraHeightOffset );
         SetActorLocation( camera_location );
-
         CurrentRotation = 0.0f;
         CaptureComponent->SetRelativeRotation( FRotator::ZeroRotator );
         return true;
     }
 
+    // :NOTE: If we failed to process current cell, log warning and try next cell
     UE_LOG( LogTemp, Warning, TEXT( "Failed to find ground position for cell at %s" ), *current_cell.Center.ToString() );
-    return MoveToNextCell();
+    CurrentCellIndex++;
+    return ProcessNextCell();
 }
 
 void ALevelStatsCollector::CaptureCurrentView()
 {
-    if ( !CaptureComponent || !CaptureComponent->TextureTarget )
+    if ( CaptureComponent == nullptr || CaptureComponent->TextureTarget == nullptr )
     {
         UE_LOG( LogTemp, Error, TEXT( "Invalid capture component or render target!" ) );
         return;
@@ -186,7 +181,7 @@ void ALevelStatsCollector::CaptureCurrentView()
     }
 }
 
-bool ALevelStatsCollector::TraceGroundPosition( const FVector & start_location, FVector & outhit_location ) const
+TOptional< FVector > ALevelStatsCollector::TraceGroundPosition( const FVector & start_location ) const
 {
     FHitResult hit_result;
     const auto end_location = start_location - FVector( 0, 0, CameraHeight * 2 );
@@ -196,17 +191,62 @@ bool ALevelStatsCollector::TraceGroundPosition( const FVector & start_location, 
 
     if ( GetWorld()->LineTraceSingleByChannel( hit_result, start_location, end_location, ECC_Visibility, query_params ) )
     {
-        outhit_location = hit_result.Location;
-        return true;
+        return hit_result.Location;
     }
 
-    return false;
+    return TOptional< FVector >();
 }
 
 void ALevelStatsCollector::CalculateGridBounds()
 {
     FBox level_bounds( ForceInit );
-    bool bounds_found = false;
+
+    auto FinalizeBounds = [ & ]() {
+        // :NOTE: Add padding to ensure we capture the edges properly
+        const auto bounds_padding = CellSize * 0.5f;
+        level_bounds = level_bounds.ExpandBy( FVector( bounds_padding, bounds_padding, 0 ) );
+
+        // :NOTE: Calculate grid bounds ensuring alignment with CellSize
+        const auto origin = level_bounds.GetCenter();
+        const auto extent = level_bounds.GetExtent();
+
+        // :NOTE: Calculate initial grid bounds
+        GridBounds.Min = FVector(
+                             FMath::FloorToFloat( origin.X - extent.X ) / CellSize * CellSize,
+                             FMath::FloorToFloat( origin.Y - extent.Y ) / CellSize * CellSize,
+                             0 ) +
+                         GridCenterOffset;
+
+        GridBounds.Max = FVector(
+                             FMath::CeilToFloat( origin.X + extent.X ) / CellSize * CellSize,
+                             FMath::CeilToFloat( origin.Y + extent.Y ) / CellSize * CellSize,
+                             0 ) +
+                         GridCenterOffset;
+
+        // :NOTE: Calculate and validate grid dimensions
+        const auto grid_size = GridBounds.Max - GridBounds.Min;
+        GridDimensions = FIntPoint(
+            FMath::CeilToInt( grid_size.X / CellSize ),
+            FMath::CeilToInt( grid_size.Y / CellSize ) );
+
+        // :NOTE: Ensure cell alignment
+        const auto expected_size_x = GridDimensions.X * CellSize;
+        const auto expected_size_y = GridDimensions.Y * CellSize;
+        const auto actual_size_x = grid_size.X;
+        const auto actual_size_y = grid_size.Y;
+
+        if ( !FMath::IsNearlyEqual( expected_size_x, actual_size_x, KINDA_SMALL_NUMBER ) ||
+             !FMath::IsNearlyEqual( expected_size_y, actual_size_y, KINDA_SMALL_NUMBER ) )
+        {
+            GridBounds.Max = GridBounds.Min + FVector( expected_size_x, expected_size_y, 0.0f );
+
+            UE_LOG( LogTemp, Warning, TEXT( "Grid size adjusted for cell alignment. Original: (%f, %f), Adjusted: (%f, %f)" ), actual_size_x, actual_size_y, expected_size_x, expected_size_y );
+        }
+
+        // :NOTE: Store the actual sizes back to our parameters
+        GridSizeX = expected_size_x;
+        GridSizeY = expected_size_y;
+    };
 
     // :NOTE: Use explicit grid dimensions if provided
     if ( GridSizeX > 0.0f && GridSizeY > 0.0f )
@@ -217,98 +257,31 @@ void ALevelStatsCollector::CalculateGridBounds()
         level_bounds = FBox(
             FVector( -half_size_x, -half_size_y, 0.0f ),
             FVector( half_size_x, half_size_y, 0.0f ) );
-        bounds_found = true;
 
         UE_LOG( LogTemp, Log, TEXT( "Using explicit grid dimensions: %f x %f" ), GridSizeX, GridSizeY );
+        FinalizeBounds();
+        return;
     }
 
     // :NOTE: Use LevelBoundsActor if no explicit dimensions provided
-    if ( !bounds_found )
+    if ( const auto * current_level = GetWorld()->GetCurrentLevel() )
     {
-        if ( const ULevel * current_level = GetWorld()->GetCurrentLevel() )
+        if ( const auto * level_bounds_actor = current_level->LevelBoundsActor.Get() )
         {
-            if ( const ALevelBounds * level_bounds_actor = current_level->LevelBoundsActor.Get() )
+            level_bounds = level_bounds_actor->GetComponentsBoundingBox( true );
+            if ( level_bounds.IsValid )
             {
-                level_bounds = level_bounds_actor->GetComponentsBoundingBox( true );
-                bounds_found = ( level_bounds.IsValid != 0 );
-
-                if ( bounds_found )
-                {
-                    UE_LOG( LogTemp, Log, TEXT( "Got bounds from LevelBoundsActor: %s" ), *level_bounds.ToString() );
-                }
+                UE_LOG( LogTemp, Log, TEXT( "Got bounds from LevelBoundsActor: %s" ), *level_bounds.ToString() );
+                FinalizeBounds();
+                return;
             }
         }
     }
 
     // :NOTE: Use default area if no bounds found
-    if ( !bounds_found || level_bounds.IsValid == 0 )
-    {
-        UE_LOG( LogTemp, Warning, TEXT( "No valid bounds source found, using default 10000x10000 area" ) );
-        level_bounds = FBox( FVector( -5000, -5000, 0 ), FVector( 5000, 5000, 0 ) ); // :NOTE: Arbitrary default area
-    }
-
-    // :NOTE: Add padding to ensure we capture the edges properly
-    const auto bounds_padding = CellSize * 0.5f;
-    level_bounds = level_bounds.ExpandBy( FVector( bounds_padding, bounds_padding, 0 ) );
-
-    // :NOTE: Calculate grid bounds ensuring alignment with CellSize
-    const auto origin = level_bounds.GetCenter();
-    const auto extent = level_bounds.GetExtent();
-
-    // :NOTE: Calculate initial grid bounds
-    GridBounds.Min = FVector(
-                         FMath::FloorToFloat( origin.X - extent.X ) / CellSize * CellSize,
-                         FMath::FloorToFloat( origin.Y - extent.Y ) / CellSize * CellSize,
-                         0 ) +
-                     GridCenterOffset;
-
-    GridBounds.Max = FVector(
-                         FMath::CeilToFloat( origin.X + extent.X ) / CellSize * CellSize,
-                         FMath::CeilToFloat( origin.Y + extent.Y ) / CellSize * CellSize,
-                         0 ) +
-                     GridCenterOffset;
-
-    // :NOTE: Calculate and validate grid dimensions
-    const auto grid_size = GridBounds.Max - GridBounds.Min;
-    GridDimensions = FIntPoint(
-        FMath::CeilToInt( grid_size.X / CellSize ),
-        FMath::CeilToInt( grid_size.Y / CellSize ) );
-
-    // :NOTE: Ensure cell alignment
-    const auto expected_size_x = GridDimensions.X * CellSize;
-    const auto expected_size_y = GridDimensions.Y * CellSize;
-    const auto actual_size_x = grid_size.X;
-    const auto actual_size_y = grid_size.Y;
-
-    if ( !FMath::IsNearlyEqual( expected_size_x, actual_size_x, KINDA_SMALL_NUMBER ) ||
-         !FMath::IsNearlyEqual( expected_size_y, actual_size_y, KINDA_SMALL_NUMBER ) )
-    {
-        GridBounds.Max = GridBounds.Min + FVector( expected_size_x, expected_size_y, 0.0f );
-
-        UE_LOG( LogTemp, Warning, TEXT( "Grid size adjusted for cell alignment. Original: (%f, %f), Adjusted: (%f, %f)" ), actual_size_x, actual_size_y, expected_size_x, expected_size_y );
-    }
-
-    // :NOTE: Store the actual sizes back to our parameters
-    GridSizeX = expected_size_x;
-    GridSizeY = expected_size_y;
-}
-
-bool ALevelStatsCollector::MoveToNextCell()
-{
-    if ( !GridCells.IsValidIndex( CurrentCellIndex ) )
-    {
-        return false;
-    }
-
-    GridCells[ CurrentCellIndex ].bProcessed = true;
-    CurrentCellIndex++;
-
-    if ( CurrentCellIndex >= GridCells.Num() )
-    {
-        return false;
-    }
-
-    return ProcessNextCell();
+    UE_LOG( LogTemp, Warning, TEXT( "No valid bounds source found, using default 10000x10000 area" ) );
+    level_bounds = FBox( FVector( -5000, -5000, 0 ), FVector( 5000, 5000, 0 ) ); // Arbitrary default area
+    FinalizeBounds();
 }
 
 FString ALevelStatsCollector::GenerateFileName() const
