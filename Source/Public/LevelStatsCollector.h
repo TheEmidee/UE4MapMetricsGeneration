@@ -4,22 +4,6 @@
 
 #include "LevelStatsCollector.generated.h"
 
-USTRUCT()
-struct FGridCell
-{
-    GENERATED_BODY()
-
-    FVector Center;
-    float GroundHeight;
-    bool bProcessed;
-
-    FGridCell() :
-        Center( FVector::ZeroVector ),
-        GroundHeight( 0.0f ),
-        bProcessed( false )
-    {}
-};
-
 UCLASS()
 class MAPMETRICSGENERATION_API ALevelStatsCollector final : public AActor
 {
@@ -36,10 +20,10 @@ private:
     void InitializeGrid();
     void SetupSceneCapture() const;
     bool ProcessNextCell();
-    void CaptureCurrentView();
-    bool TraceGroundPosition( const FVector & start_location, FVector & out_hit_location ) const;
-    void CalculateGridBounds();
     bool MoveToNextCell();
+    void CaptureCurrentView();
+    TOptional< FVector > TraceGroundPosition( const FVector & start_location ) const;
+    void CalculateGridBounds();
     FString GenerateFileName() const;
     void LogGridInfo() const;
 
@@ -72,6 +56,22 @@ public:
     FString OutputDirectory;
 
 private:
+    struct FGridCell
+    {
+        FVector Center;
+        float GroundHeight;
+
+        explicit FGridCell( const FVector & center ) :
+            Center( center ),
+            GroundHeight( 0.0f )
+        {}
+
+        FGridCell() :
+            Center( FVector::ZeroVector ),
+            GroundHeight( 0.0f )
+        {}
+    };
+
     UPROPERTY()
     USceneCaptureComponent2D * CaptureComponent;
 

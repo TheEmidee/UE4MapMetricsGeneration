@@ -21,6 +21,7 @@ private:
         float CameraHeight;
         float CameraHeightOffset;
         float CameraRotationDelta;
+        float CameraFOVAngle;
         FString ScreenshotPattern;
     };
 

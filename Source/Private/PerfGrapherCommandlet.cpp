@@ -97,7 +97,7 @@ UPerfGrapherCommandlet::UPerfGrapherCommandlet()
 
     // :NOTE: Set up commandlet help info
     HelpDescription = TEXT( "Generate metrics and screenshots for a map using a grid system" );
-    HelpUsage = TEXT( "<MapName> -CellSize=<size> [-GridOffset=X,Y,Z] [-CameraHeight=<height>] [-CameraHeightOffset=<offset>] [-CameraRotationDelta=<angle>] [-ScreenshotPattern=<pattern>]" );
+    HelpUsage = TEXT( "[-Map=MapName] [-CellSize=<size>] [-GridOffset=X,Y,Z] [-CameraHeight=<height>] [-CameraHeightOffset=<offset>] [-CameraRotationDelta=<angle>] [-CameraFOVAngle=<angle>] [-ScreenshotPattern=<pattern>]" );
 
     HelpParamNames.Add( TEXT( "MapName" ) );
     HelpParamNames.Add( TEXT( "CellSize" ) );
@@ -105,6 +105,7 @@ UPerfGrapherCommandlet::UPerfGrapherCommandlet()
     HelpParamNames.Add( TEXT( "CameraHeight" ) );
     HelpParamNames.Add( TEXT( "CameraHeightOffset" ) );
     HelpParamNames.Add( TEXT( "CameraRotationDelta" ) );
+    HelpParamNames.Add( TEXT( "CameraFOVAngle" ) );
     HelpParamNames.Add( TEXT( "ScreenshotPattern" ) );
 
     HelpParamDescriptions.Add( TEXT( "Name of the map to process" ) );
@@ -113,6 +114,7 @@ UPerfGrapherCommandlet::UPerfGrapherCommandlet()
     HelpParamDescriptions.Add( TEXT( "Height to place camera (default: 170)" ) );
     HelpParamDescriptions.Add( TEXT( "Additional height offset after ground trace (default: 80)" ) );
     HelpParamDescriptions.Add( TEXT( "Rotation angle between screenshots (default: 90)" ) );
+    HelpParamDescriptions.Add( TEXT( "Field of view angle for the camera (default: 90)" ) );
     HelpParamDescriptions.Add( TEXT( "Pattern for screenshot filenames (default: screenshot_%d_%d_%d)" ) );
 }
 
@@ -258,6 +260,7 @@ bool UPerfGrapherCommandlet::ParseParams( const FString & params, FMetricsParams
     out_params.CameraHeight = 170.0f;
     out_params.CameraHeightOffset = 80.0f;
     out_params.CameraRotationDelta = 90.0f;
+    out_params.CameraFOVAngle = 90.0f;
     out_params.ScreenshotPattern = TEXT( "screenshot_%d_%d_%d" );
 
     // :NOTE: Override with passed parameters
@@ -297,6 +300,11 @@ bool UPerfGrapherCommandlet::ParseParams( const FString & params, FMetricsParams
     if ( params_map.Contains( TEXT( "CameraRotationDelta" ) ) )
     {
         out_params.CameraRotationDelta = FCString::Atof( *params_map[ TEXT( "CameraRotationDelta" ) ] );
+    }
+
+    if ( params_map.Contains( TEXT( "CameraFOVAngle" ) ) )
+    {
+        out_params.CameraFOVAngle = FCString::Atof( *params_map[ TEXT( "CameraFOVAngle" ) ] );
     }
 
     if ( params_map.Contains( TEXT( "ScreenshotPattern" ) ) )
