@@ -13,6 +13,80 @@
 // :NOTE: ReSharper disable once CppInconsistentNaming
 DEFINE_LOG_CATEGORY_STATIC( LogPerfGrapher, Verbose, All )
 
+class FWorldHandler
+{
+public:
+    explicit FWorldHandler( UWorld * world ) :
+        World( world )
+    {
+        if ( World != nullptr )
+        {
+            Initialize();
+        }
+    }
+    ~FWorldHandler()
+    {
+        Cleanup();
+    }
+
+    FWorldHandler( const FWorldHandler & ) = delete;
+    FWorldHandler & operator=( const FWorldHandler & ) = delete;
+
+    UWorld * GetWorld() const;
+
+private:
+    void Initialize() const
+    {
+        // :NOTE: Initialize World Partition if it exists
+        if ( World->GetWorldPartition() )
+        {
+            World->GetWorldPartition()->Initialize( World, FTransform::Identity );
+        }
+
+        // :NOTE: Setup world
+        World->WorldType = EWorldType::Editor;
+        World->AddToRoot();
+
+        if ( !World->bIsWorldInitialized )
+        {
+            UWorld::InitializationValues IVs;
+            IVs.RequiresHitProxies( true )
+                .ShouldSimulatePhysics( true )
+                .EnableTraceCollision( true )
+                .CreateNavigation( true )
+                .CreateAISystem( true )
+                .AllowAudioPlayback( true )
+                .CreatePhysicsScene( true );
+
+            World->InitWorld( IVs );
+            World->PersistentLevel->UpdateModelComponents();
+            World->UpdateWorldComponents( true, false );
+        }
+    }
+
+    void Cleanup() const
+    {
+        if ( World->GetWorldPartition() )
+        {
+            World->GetWorldPartition()->Uninitialize();
+        }
+
+        World->CleanupWorld();
+        World->RemoveFromRoot();
+        World->FlushLevelStreaming( EFlushLevelStreamingType::Full );
+
+        // :NOTE: Force garbage collection
+        CollectGarbage( GARBAGE_COLLECTION_KEEPFLAGS );
+    }
+
+    UWorld * World;
+};
+
+FORCEINLINE UWorld * FWorldHandler::GetWorld() const
+{
+    return World;
+}
+
 UPerfGrapherCommandlet::UPerfGrapherCommandlet()
 {
     IsClient = false;
@@ -140,61 +214,24 @@ bool UPerfGrapherCommandlet::RunPerfGrapher( const FString & package_name, const
     }
     UE_LOG( LogPerfGrapher, Log, TEXT( "World %s found" ), *world->GetName() );
 
-    // :NOTE: Initialize World Partition if it exists
-    if ( world->GetWorldPartition() )
+    // :NOTE: Use RAII handler for world initialization and cleanup
     {
-        UE_LOG( LogPerfGrapher, Log, TEXT( "World Partition found, initializing..." ) );
-        world->GetWorldPartition()->Initialize( world, FTransform::Identity );
-    }
-    UE_LOG( LogPerfGrapher, Log, TEXT( "World Partition initialized" ) );
+        const FWorldHandler world_handler( world );
+        UE_LOG( LogPerfGrapher, Log, TEXT( "World %s initialized" ), *world->GetName() );
 
-    // :NOTE: Load World
-    world->WorldType = EWorldType::Editor;
-    world->AddToRoot();
+        // :NOTE: Spawn collector
+        const auto * Collector = world_handler.GetWorld()->SpawnActor< ALevelStatsCollector >( FVector::ZeroVector, FRotator::ZeroRotator );
 
-    if ( !world->bIsWorldInitialized )
-    {
-        UWorld::InitializationValues ivs;
-        ivs.RequiresHitProxies( false );
-        ivs.ShouldSimulatePhysics( false );
-        ivs.EnableTraceCollision( false );
-        ivs.CreateNavigation( false );
-        ivs.CreateAISystem( false );
-        ivs.AllowAudioPlayback( false );
-        ivs.CreatePhysicsScene( true );
+        UE_LOG( LogPerfGrapher, Log, TEXT( "Attempting to spawn collector..." ) );
+        if ( Collector == nullptr )
+        {
+            UE_LOG( LogPerfGrapher, Error, TEXT( "Failed to spawn collector" ) );
+            return false;
+        }
+        UE_LOG( LogPerfGrapher, Log, TEXT( "Collector spawned successfully at location %s" ), *Collector->GetActorLocation().ToString() );
+    } // :NOTE: WorldHandler automatically cleans up here
 
-        world->InitWorld( ivs );
-        world->PersistentLevel->UpdateModelComponents();
-        world->UpdateWorldComponents( true, false );
-    }
-    UE_LOG( LogPerfGrapher, Log, TEXT( "World %s initialized" ), *world->GetName() );
-
-    // :NOTE: Spawn collector
-    const auto * collector = world->SpawnActor< ALevelStatsCollector >( FVector::ZeroVector, FRotator::ZeroRotator );
-
-    UE_LOG( LogPerfGrapher, Log, TEXT( "Attempting to spawn observer..." ) );
-    if ( collector == nullptr )
-    {
-        UE_LOG( LogPerfGrapher, Error, TEXT( "Failed to spawn observer" ) );
-        return false;
-    }
-    UE_LOG( LogPerfGrapher, Log, TEXT( "Observer spawned successfully at location %s" ), *collector->GetActorLocation().ToString() );
-
-    // :NOTE: Cleanup
-    if ( world->GetWorldPartition() )
-    {
-        world->GetWorldPartition()->Uninitialize();
-    }
-
-    world->CleanupWorld();
-    world->RemoveFromRoot();
-    world->FlushLevelStreaming( EFlushLevelStreamingType::Full );
     UE_LOG( LogPerfGrapher, Log, TEXT( "World %s cleaned up" ), *world->GetName() );
-
-    // :NOTE: Force garbage collection to clean up
-    CollectGarbage( GARBAGE_COLLECTION_KEEPFLAGS );
-    UE_LOG( LogPerfGrapher, Log, TEXT( "Garbage collection completed" ) );
-
     return true;
 }
 
