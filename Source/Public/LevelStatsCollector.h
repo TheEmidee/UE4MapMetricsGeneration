@@ -26,35 +26,6 @@ private:
     FString GenerateFileName() const;
     void LogGridInfo() const;
 
-public:
-    UPROPERTY()
-    float GridSizeX;
-
-    UPROPERTY()
-    float GridSizeY;
-
-    UPROPERTY()
-    float CellSize;
-
-    UPROPERTY()
-    FVector GridCenterOffset;
-
-    UPROPERTY()
-    float CameraHeight;
-
-    UPROPERTY()
-    float CameraHeightOffset;
-
-    UPROPERTY()
-    float CameraRotationDelta;
-
-    UPROPERTY( EditAnywhere, Category = "Capture Configuration" )
-    float CaptureDelay;
-
-    UPROPERTY( EditAnywhere, Category = "Capture Configuration" )
-    FString OutputDirectory;
-
-private:
     struct FGridCell
     {
         FVector Center;
@@ -74,6 +45,15 @@ private:
     UPROPERTY()
     USceneCaptureComponent2D * CaptureComponent;
 
+    float GridSizeX;
+    float GridSizeY;
+    float CellSize;
+    FVector GridCenterOffset;
+    float CameraHeight;
+    float CameraHeightOffset;
+    float CameraRotationDelta;
+    float CaptureDelay;
+    FString OutputDirectory;
     TArray< FGridCell > GridCells;
     int32 CurrentCellIndex;
     float CurrentRotation;

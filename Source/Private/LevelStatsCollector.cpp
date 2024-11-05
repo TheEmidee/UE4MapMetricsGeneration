@@ -201,7 +201,7 @@ void ALevelStatsCollector::CalculateGridBounds()
 {
     FBox level_bounds( ForceInit );
 
-    auto FinalizeBounds = [ & ]() {
+    const auto finalize_bounds = [ & ]() {
         // :NOTE: Add padding to ensure we capture the edges properly
         const auto bounds_padding = CellSize * 0.5f;
         level_bounds = level_bounds.ExpandBy( FVector( bounds_padding, bounds_padding, 0 ) );
@@ -259,7 +259,7 @@ void ALevelStatsCollector::CalculateGridBounds()
             FVector( half_size_x, half_size_y, 0.0f ) );
 
         UE_LOG( LogTemp, Log, TEXT( "Using explicit grid dimensions: %f x %f" ), GridSizeX, GridSizeY );
-        FinalizeBounds();
+        finalize_bounds();
         return;
     }
 
@@ -272,7 +272,7 @@ void ALevelStatsCollector::CalculateGridBounds()
             if ( level_bounds.IsValid )
             {
                 UE_LOG( LogTemp, Log, TEXT( "Got bounds from LevelBoundsActor: %s" ), *level_bounds.ToString() );
-                FinalizeBounds();
+                finalize_bounds();
                 return;
             }
         }
@@ -281,7 +281,7 @@ void ALevelStatsCollector::CalculateGridBounds()
     // :NOTE: Use default area if no bounds found
     UE_LOG( LogTemp, Warning, TEXT( "No valid bounds source found, using default 10000x10000 area" ) );
     level_bounds = FBox( FVector( -5000, -5000, 0 ), FVector( 5000, 5000, 0 ) ); // Arbitrary default area
-    FinalizeBounds();
+    finalize_bounds();
 }
 
 FString ALevelStatsCollector::GenerateFileName() const
