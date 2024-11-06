@@ -1,4 +1,4 @@
-#include "PerfGrapherCommandlet.h"
+#include "LevelStatsCollectorCommandlet.h"
 
 #include <Dom/JsonObject.h>
 #include <Editor.h>
@@ -37,13 +37,11 @@ public:
 private:
     void Initialize() const
     {
-        // :NOTE: Initialize World Partition if it exists
         if ( World->GetWorldPartition() )
         {
             World->GetWorldPartition()->Initialize( World, FTransform::Identity );
         }
 
-        // :NOTE: Setup world
         World->WorldType = EWorldType::Editor;
         World->AddToRoot();
 
@@ -87,7 +85,7 @@ FORCEINLINE UWorld * FWorldHandler::GetWorld() const
     return World;
 }
 
-UPerfGrapherCommandlet::UPerfGrapherCommandlet()
+ULevelStatsCollectorCommandlet::ULevelStatsCollectorCommandlet()
 {
     IsClient = false;
     IsServer = false;
@@ -118,7 +116,7 @@ UPerfGrapherCommandlet::UPerfGrapherCommandlet()
     HelpParamDescriptions.Add( TEXT( "Pattern for screenshot filenames (default: screenshot_%d_%d_%d)" ) );
 }
 
-int32 UPerfGrapherCommandlet::Main( const FString & params )
+int32 ULevelStatsCollectorCommandlet::Main( const FString & params )
 {
     UE_LOG( LogPerfGrapher, Log, TEXT( "--------------------------------------------------------------------------------------------" ) );
     UE_LOG( LogPerfGrapher, Log, TEXT( "Running PerfGrapher Commandlet" ) );
@@ -185,7 +183,7 @@ int32 UPerfGrapherCommandlet::Main( const FString & params )
     for ( const auto & package_name : package_names )
     {
         UE_LOG( LogPerfGrapher, Log, TEXT( "Processing package: %s" ), *package_name );
-        if ( !RunPerfGrapher( package_name, metrics_params ) )
+        if ( !RunLevelStatsCommandlet( package_name, metrics_params ) )
         {
             UE_LOG( LogPerfGrapher, Error, TEXT( "Failed to process map %s" ), *package_name );
             return 1;
@@ -196,9 +194,8 @@ int32 UPerfGrapherCommandlet::Main( const FString & params )
     return 0;
 }
 
-bool UPerfGrapherCommandlet::RunPerfGrapher( const FString & package_name, const FMetricsParams & metrics_params ) const
+bool ULevelStatsCollectorCommandlet::RunLevelStatsCommandlet( const FString & package_name, const FMetricsParams & metrics_params ) const
 {
-    // :NOTE: Load the world package
     auto * package = LoadPackage( nullptr, *package_name, LOAD_None );
     if ( package == nullptr )
     {
@@ -207,7 +204,6 @@ bool UPerfGrapherCommandlet::RunPerfGrapher( const FString & package_name, const
     }
     UE_LOG( LogPerfGrapher, Log, TEXT( "Package %s loaded" ), *package_name );
 
-    // :NOTE: Get world from package
     auto * world = UWorld::FindWorldInPackage( package );
     if ( world == nullptr )
     {
@@ -216,12 +212,10 @@ bool UPerfGrapherCommandlet::RunPerfGrapher( const FString & package_name, const
     }
     UE_LOG( LogPerfGrapher, Log, TEXT( "World %s found" ), *world->GetName() );
 
-    // :NOTE: Use RAII handler for world initialization and cleanup
     {
         const FWorldHandler world_handler( world );
         UE_LOG( LogPerfGrapher, Log, TEXT( "World %s initialized" ), *world->GetName() );
 
-        // :NOTE: Spawn collector
         const auto * Collector = world_handler.GetWorld()->SpawnActor< ALevelStatsCollector >( FVector::ZeroVector, FRotator::ZeroRotator );
 
         UE_LOG( LogPerfGrapher, Log, TEXT( "Attempting to spawn collector..." ) );
@@ -231,19 +225,18 @@ bool UPerfGrapherCommandlet::RunPerfGrapher( const FString & package_name, const
             return false;
         }
         UE_LOG( LogPerfGrapher, Log, TEXT( "Collector spawned successfully at location %s" ), *Collector->GetActorLocation().ToString() );
-    } // :NOTE: WorldHandler automatically cleans up here
+    }
 
     UE_LOG( LogPerfGrapher, Log, TEXT( "World %s cleaned up" ), *world->GetName() );
     return true;
 }
 
-bool UPerfGrapherCommandlet::ParseParams( const FString & params, FMetricsParams & out_params, TMap< FString, FString > & params_map ) const
+bool ULevelStatsCollectorCommandlet::ParseParams( const FString & params, FMetricsParams & out_params, TMap< FString, FString > & params_map ) const
 {
     TArray< FString > tokens;
     TArray< FString > switches;
     ParseCommandLine( *params, tokens, switches, params_map );
 
-    // :NOTE: Log initial parameters
     UE_LOG( LogPerfGrapher, Display, TEXT( "Parsing commandlet parameters:" ) );
     UE_LOG( LogPerfGrapher, Display, TEXT( "Raw params: %s" ), *params );
     UE_LOG( LogPerfGrapher, Display, TEXT( "Found %d tokens, %d switches, %d params" ), tokens.Num(), switches.Num(), params_map.Num() );
