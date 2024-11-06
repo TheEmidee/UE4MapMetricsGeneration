@@ -5,15 +5,15 @@
 
 #include "LevelStatsCollector.generated.h"
 
-class MAPMETRICSGENERATION_API FCustomPerformanceChart final : public FPerformanceTrackingChart
+class FPerformanceMetricsCapture final : public FPerformanceTrackingChart
 {
 public:
-    FCustomPerformanceChart( const FDateTime & in_start_time, const FString & in_chart_label, const FString & in_output_path );
-    void DumpFPSChartToCustomLocation( const FString & in_map_name );
+    FPerformanceMetricsCapture( const FDateTime & in_start_time, const FString & in_chart_label );
+    TSharedPtr< FJsonObject > GetMetricsJson() const;
+    void CaptureMetrics() const;
 
 private:
-    static FString CreateFileNameForChart( const FString & /* chart_type */, const FString & /* in_map_name */, const FString & file_extension );
-    FString CustomOutputPath;
+    TSharedPtr< FJsonObject > MetricsObject;
 };
 
 UCLASS()
@@ -40,9 +40,16 @@ private:
     void ProcessMetricsCapture( float DeltaTime );
     void FinishMetricsCapture();
 
+    void InitializeJsonReport();
+    void AddCellToReport();
+    void AddRotationToReport();
+    void FinalizeAndSaveReport() const;
+    void SaveRotationMetrics( const TSharedPtr< FJsonObject > & rotation_object );
+
     FString GetBasePath() const;
     FString GetCurrentCellPath() const;
     FString GetCurrentRotationPath() const;
+    FString GetJsonOutputPath() const;
 
     void LogGridInfo() const;
 
@@ -75,10 +82,12 @@ private:
     USceneCaptureComponent2D * CaptureComponent;
 
     ECaptureState CurrentState;
-    TSharedPtr< FCustomPerformanceChart > CurrentPerformanceChart;
+    TSharedPtr< FPerformanceMetricsCapture > CurrentPerformanceChart;
     float CurrentMetricsCaptureTime;
     float MetricsDuration;
     float MetricsWaitDelay;
+    TSharedPtr< FJsonObject > CaptureReport;
+    TSharedPtr< FJsonObject > CurrentCellObject;
 
     float GridSizeX;
     float GridSizeY;
@@ -98,3 +107,14 @@ private:
     bool bIsCapturing;
     bool bIsInitialized;
 };
+
+FORCEINLINE FPerformanceMetricsCapture::FPerformanceMetricsCapture( const FDateTime & in_start_time, const FString & in_chart_label ) :
+    FPerformanceTrackingChart( in_start_time, in_chart_label )
+{
+    MetricsObject = MakeShared< FJsonObject >();
+}
+
+FORCEINLINE TSharedPtr< FJsonObject > FPerformanceMetricsCapture::GetMetricsJson() const
+{
+    return MetricsObject;
+}
