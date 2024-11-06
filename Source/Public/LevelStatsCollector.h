@@ -28,9 +28,6 @@ private:
 
     struct FGridCell
     {
-        FVector Center;
-        float GroundHeight;
-
         explicit FGridCell( const FVector & center ) :
             Center( center ),
             GroundHeight( 0.0f )
@@ -40,6 +37,9 @@ private:
             Center( FVector::ZeroVector ),
             GroundHeight( 0.0f )
         {}
+
+        FVector Center;
+        float GroundHeight;
     };
 
     UPROPERTY()
