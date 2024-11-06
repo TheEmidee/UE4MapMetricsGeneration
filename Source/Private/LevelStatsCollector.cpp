@@ -37,7 +37,7 @@ void FCustomPerformanceChart::DumpFPSChartToCustomLocation( const FString & in_m
 #endif
 }
 
-FString FCustomPerformanceChart::CreateFileNameForChart( const FString &, const FString &, const FString & file_extension )
+FString FCustomPerformanceChart::CreateFileNameForChart( const FString & /* chart_type */, const FString & /* in_map_name */, const FString & file_extension )
 {
     const FString platform = FPlatformProperties::PlatformName();
     return TEXT( "metrics" ) + file_extension;
