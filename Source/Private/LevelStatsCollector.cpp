@@ -6,6 +6,43 @@
 #include <Engine/TextureRenderTarget2D.h>
 #include <ImageUtils.h>
 
+FCustomPerformanceChart::FCustomPerformanceChart( const FDateTime & in_start_time, const FString & in_chart_label, const FString & in_output_path ) :
+    FPerformanceTrackingChart( in_start_time, in_chart_label ),
+    CustomOutputPath( in_output_path )
+{
+}
+
+void FCustomPerformanceChart::DumpFPSChartToCustomLocation( const FString & in_map_name )
+{
+    TArray< const FPerformanceTrackingChart * > charts;
+    charts.Add( this );
+
+    DumpChartsToOutputLog( AccumulatedChartTime, charts, in_map_name );
+
+#if ALLOW_DEBUG_FILES
+    IFileManager::Get().MakeDirectory( *CustomOutputPath, true );
+
+    {
+        const auto log_filename = CustomOutputPath / CreateFileNameForChart( TEXT( "FPS" ), in_map_name, TEXT( ".log" ) );
+        DumpChartsToLogFile( AccumulatedChartTime, charts, in_map_name, log_filename );
+    }
+
+    {
+        const auto map_and_chart_label = ChartLabel.IsEmpty() ? in_map_name : ( ChartLabel + TEXT( "-" ) + in_map_name );
+        const auto html_filename = CustomOutputPath / CreateFileNameForChart( TEXT( "FPS" ),
+                                                          *( map_and_chart_label + TEXT( "-" ) + CaptureStartTime.ToString() ),
+                                                          TEXT( ".html" ) );
+        DumpChartsToHTML( AccumulatedChartTime, charts, map_and_chart_label, html_filename );
+    }
+#endif
+}
+
+FString FCustomPerformanceChart::CreateFileNameForChart( const FString &, const FString &, const FString & file_extension )
+{
+    const FString platform = FPlatformProperties::PlatformName();
+    return TEXT( "metrics" ) + file_extension;
+}
+
 ALevelStatsCollector::ALevelStatsCollector() :
     CurrentState( ECaptureState::Idle ),
     CurrentMetricsCaptureTime( 0.0f ),
@@ -308,7 +345,7 @@ void ALevelStatsCollector::CalculateGridBounds()
 
 void ALevelStatsCollector::StartMetricsCapture()
 {
-    const FString label = FString::Printf( TEXT( "Cell_%d_Rot_%.0f" ),
+    const auto label = FString::Printf( TEXT( "Cell_%d_Rot_%.0f" ),
         CurrentCellIndex,
         CurrentRotation );
 
@@ -344,7 +381,7 @@ void ALevelStatsCollector::FinishMetricsCapture()
 {
     if ( CurrentPerformanceChart.IsValid() )
     {
-        const FString cell_name = FString::Printf( TEXT( "Cell_%d_Rot_%.0f" ), CurrentCellIndex, CurrentRotation );
+        const auto cell_name = FString::Printf( TEXT( "Cell_%d_Rot_%.0f" ), CurrentCellIndex, CurrentRotation );
         CurrentPerformanceChart->DumpFPSChartToCustomLocation( cell_name );
         GEngine->RemovePerformanceDataConsumer( CurrentPerformanceChart );
         CurrentPerformanceChart.Reset();

@@ -8,44 +8,11 @@
 class MAPMETRICSGENERATION_API FCustomPerformanceChart final : public FPerformanceTrackingChart
 {
 public:
-    FCustomPerformanceChart( const FDateTime & in_start_time, const FString & in_chart_label, const FString & in_output_path ) :
-        FPerformanceTrackingChart( in_start_time, in_chart_label ),
-        CustomOutputPath( in_output_path )
-    {
-    }
-
-    void DumpFPSChartToCustomLocation( const FString & in_map_name )
-    {
-        TArray< const FPerformanceTrackingChart * > charts;
-        charts.Add( this );
-
-        DumpChartsToOutputLog( AccumulatedChartTime, charts, in_map_name );
-
-#if ALLOW_DEBUG_FILES
-        IFileManager::Get().MakeDirectory( *CustomOutputPath, true );
-
-        {
-            const auto log_filename = CustomOutputPath / CreateFileNameForChart( TEXT( "FPS" ), in_map_name, TEXT( ".log" ) );
-            DumpChartsToLogFile( AccumulatedChartTime, charts, in_map_name, log_filename );
-        }
-
-        {
-            const auto map_and_chart_label = ChartLabel.IsEmpty() ? in_map_name : ( ChartLabel + TEXT( "-" ) + in_map_name );
-            const auto html_filename = CustomOutputPath / CreateFileNameForChart( TEXT( "FPS" ),
-                                                              *( map_and_chart_label + TEXT( "-" ) + CaptureStartTime.ToString() ),
-                                                              TEXT( ".html" ) );
-            DumpChartsToHTML( AccumulatedChartTime, charts, map_and_chart_label, html_filename );
-        }
-#endif
-    }
+    FCustomPerformanceChart( const FDateTime & in_start_time, const FString & in_chart_label, const FString & in_output_path );
+    void DumpFPSChartToCustomLocation( const FString & in_map_name );
 
 private:
-    static FString CreateFileNameForChart( const FString & /* chart_type */, const FString & /* in_map_name */, const FString & file_extension )
-    {
-        const FString platform = FPlatformProperties::PlatformName();
-        return TEXT( "metrics" ) + file_extension;
-    }
-
+    static FString CreateFileNameForChart( const FString & /* chart_type */, const FString & /* in_map_name */, const FString & file_extension );
     FString CustomOutputPath;
 };
 
