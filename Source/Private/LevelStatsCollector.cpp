@@ -1,5 +1,7 @@
 ﻿#include "LevelStatsCollector.h"
 
+#include "LevelStatsCollectorState.h"
+
 #include <Components/SceneCaptureComponent2D.h>
 #include <Engine/Engine.h>
 #include <Engine/LevelBounds.h>
@@ -44,22 +46,20 @@ FString FCustomPerformanceChart::CreateFileNameForChart( const FString & /* char
 }
 
 ALevelStatsCollector::ALevelStatsCollector() :
-    CurrentState( ECaptureState::Idle ),
-    CurrentMetricsCaptureTime( 0.0f ),
+    GridCenterOffset( FVector::ZeroVector ),
+    TotalCaptureCount( 0 ),
+    CurrentCellIndex( 0 ),
     MetricsDuration( 5.0f ),
     MetricsWaitDelay( 1.0f ),
     CellSize( 10000.0f ),
-    GridCenterOffset( FVector::ZeroVector ),
     CameraHeight( 10000.0f ),
     CameraHeightOffset( 250.0f ),
     CameraRotationDelta( 90.0f ),
     CaptureDelay( 0.1f ),
-    CurrentCellIndex( 0 ),
     CurrentRotation( 0.0f ),
     CurrentCaptureDelay( 0.0f ),
-    TotalCaptureCount( 0 ),
-    bIsCapturing( false ),
-    bIsInitialized( false )
+    IsCaptureInProgress( false ),
+    IsCollectorInitialized( false )
 
 {
     PrimaryActorTick.bCanEverTick = true;
@@ -78,75 +78,28 @@ void ALevelStatsCollector::BeginPlay()
 {
     Super::BeginPlay();
     IConsoleManager::Get().FindConsoleVariable( TEXT( "t.FPSChart.OpenFolderOnDump" ) )->Set( 0 );
-    CurrentState = ECaptureState::Idle;
+    TransitionToState( MakeShared< FIdleState >( this ) );
     InitializeGrid();
 }
 
-void ALevelStatsCollector::Tick( float delta_time )
+void ALevelStatsCollector::Tick( const float delta_time )
 {
     Super::Tick( delta_time );
 
-    if ( !bIsCapturing || !bIsInitialized )
+    if ( !IsCaptureInProgress || !IsCollectorInitialized )
     {
         return;
     }
 
-    switch ( CurrentState )
+    if ( CurrentState != nullptr )
     {
-        case ECaptureState::Idle:
-            CurrentCaptureDelay += delta_time;
-            if ( CurrentCaptureDelay >= MetricsWaitDelay )
-            {
-                CurrentCaptureDelay = 0.0f;
-                StartMetricsCapture();
-            }
-            break;
-
-        case ECaptureState::CapturingMetrics:
-            ProcessMetricsCapture( delta_time );
-            break;
-
-        case ECaptureState::WaitingForSnapshot:
-            CurrentCaptureDelay += delta_time;
-            if ( CurrentCaptureDelay >= CaptureDelay )
-            {
-                CurrentCaptureDelay = 0.0f;
-                CaptureCurrentView();
-                CurrentState = ECaptureState::ProcessingNextRotation;
-            }
-            break;
-
-        case ECaptureState::ProcessingNextRotation:
-            CurrentRotation += CameraRotationDelta;
-            if ( CurrentRotation >= 360.0f )
-            {
-                CurrentCellIndex++;
-                CurrentState = ECaptureState::ProcessingNextCell;
-            }
-            else
-            {
-                CaptureComponent->SetRelativeRotation( FRotator( 0.0f, CurrentRotation, 0.0f ) );
-                CurrentState = ECaptureState::Idle;
-            }
-            break;
-
-        case ECaptureState::ProcessingNextCell:
-            if ( !ProcessNextCell() )
-            {
-                bIsCapturing = false;
-                UE_LOG( LogTemp, Log, TEXT( "Capture process complete! Total captures: %d" ), TotalCaptureCount );
-            }
-            else
-            {
-                CurrentState = ECaptureState::Idle;
-            }
-            break;
+        CurrentState->Tick( delta_time );
     }
 }
 
 void ALevelStatsCollector::SetupSceneCapture() const
 {
-    if ( !CaptureComponent )
+    if ( CaptureComponent == nullptr )
     {
         UE_LOG( LogTemp, Error, TEXT( "CaptureComponent is not set!" ) );
         return;
@@ -180,8 +133,8 @@ void ALevelStatsCollector::InitializeGrid()
 
     CurrentCellIndex = 0;
     CurrentRotation = 0.0f;
-    bIsCapturing = true;
-    bIsInitialized = true;
+    IsCaptureInProgress = true;
+    IsCollectorInitialized = true;
 
     LogGridInfo();
     ProcessNextCell();
@@ -265,7 +218,7 @@ void ALevelStatsCollector::CalculateGridBounds()
 {
     FBox level_bounds( ForceInit );
 
-    const auto finalize_bounds = [ & ]() {
+    const auto finalize_bounds = [ & ] {
         // :NOTE: Add padding to ensure we capture the edges properly
         const auto bounds_padding = CellSize * 0.5f;
         level_bounds = level_bounds.ExpandBy( FVector( bounds_padding, bounds_padding, 0 ) );
@@ -343,6 +296,35 @@ void ALevelStatsCollector::CalculateGridBounds()
     finalize_bounds();
 }
 
+void ALevelStatsCollector::TransitionToState( const TSharedPtr< FLevelStatsCollectorState > & new_state )
+{
+    if ( CurrentState != nullptr )
+    {
+        CurrentState->Exit();
+    }
+
+    CurrentState = new_state;
+    CurrentState->Enter();
+}
+
+void ALevelStatsCollector::UpdateRotation()
+{
+    CurrentRotation += CameraRotationDelta;
+    CaptureComponent->SetRelativeRotation( FRotator( 0.0f, CurrentRotation, 0.0f ) );
+}
+
+void ALevelStatsCollector::IncrementCellIndex()
+{
+    CurrentCellIndex++;
+    CurrentRotation = 0.0f;
+}
+
+void ALevelStatsCollector::FinishCapture()
+{
+    IsCaptureInProgress = false;
+    UE_LOG( LogTemp, Log, TEXT( "Capture process complete! Total captures: %d" ), TotalCaptureCount );
+}
+
 void ALevelStatsCollector::StartMetricsCapture()
 {
     const auto label = FString::Printf( TEXT( "Cell_%d_Rot_%.0f" ),
@@ -361,20 +343,6 @@ void ALevelStatsCollector::StartMetricsCapture()
         GetCurrentRotationPath() ) );
 
     GEngine->AddPerformanceDataConsumer( CurrentPerformanceChart );
-
-    CurrentMetricsCaptureTime = 0.0f;
-    CurrentState = ECaptureState::CapturingMetrics;
-}
-
-void ALevelStatsCollector::ProcessMetricsCapture( float delta_time )
-{
-    CurrentMetricsCaptureTime += delta_time;
-
-    if ( CurrentMetricsCaptureTime >= MetricsDuration )
-    {
-        FinishMetricsCapture();
-        CurrentState = ECaptureState::WaitingForSnapshot;
-    }
 }
 
 void ALevelStatsCollector::FinishMetricsCapture()
