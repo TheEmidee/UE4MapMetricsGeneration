@@ -6,11 +6,6 @@
 #include "LevelStatsCollector.generated.h"
 
 class FLevelStatsCollectorState;
-class FIdleState;
-class FWaitingForSnapshotState;
-class FProcessingNextRotationState;
-class FProcessingNextCellState;
-class FCapturingMetricsState;
 
 class FCustomPerformanceChart final : public FPerformanceTrackingChart
 {
