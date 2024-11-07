@@ -12,6 +12,8 @@
 #include <Serialization/JsonSerializer.h>
 #include <Serialization/JsonWriter.h>
 
+DEFINE_LOG_CATEGORY( LogLevelStatsCollector );
+
 void FPerformanceMetricsCapture::CaptureMetrics() const
 {
     // :NOTE: Core Performance Metrics
@@ -157,7 +159,7 @@ void ALevelStatsCollector::IncrementCellIndex()
 void ALevelStatsCollector::FinishCapture()
 {
     IsCaptureInProgress = false;
-    UE_LOG( LogTemp, Log, TEXT( "Capture process complete! Total captures: %d" ), TotalCaptureCount );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "Capture process complete! Total captures: %d" ), TotalCaptureCount );
 }
 
 bool ALevelStatsCollector::ProcessNextCell()
@@ -170,20 +172,15 @@ bool ALevelStatsCollector::ProcessNextCell()
 
     if ( !CaptureReport.IsValid() )
     {
-        UE_LOG( LogTemp, Error, TEXT( "ProcessNextCell: CaptureReport is invalid" ) );
+        UE_LOG( LogLevelStatsCollector, Error, TEXT( "ProcessNextCell: CaptureReport is invalid" ) );
         return false;
     }
 
-    // :NOTE: Add previous cell to report if it exists
     if ( CurrentCellObject.IsValid() )
     {
-        const TArray< TSharedPtr< FJsonValue > > * existing_array = nullptr;
-        if ( CaptureReport->TryGetArrayField( TEXT( "Cells" ), existing_array ) )
-        {
-            auto updated_array = *existing_array;
-            updated_array.Add( MakeShared< FJsonValueObject >( CurrentCellObject ) );
-            CaptureReport->SetArrayField( TEXT( "Cells" ), updated_array );
-        }
+        auto cells = CaptureReport->GetArrayField( TEXT( "Cells" ) );
+        cells.Add( MakeShared< FJsonValueObject >( CurrentCellObject ) );
+        CaptureReport->SetArrayField( TEXT( "Cells" ), cells );
     }
 
     AddCellToReport();
@@ -201,7 +198,7 @@ bool ALevelStatsCollector::ProcessNextCell()
         return true;
     }
 
-    UE_LOG( LogTemp, Warning, TEXT( "Failed to find ground position for cell at %s" ), *current_cell.Center.ToString() );
+    UE_LOG( LogLevelStatsCollector, Warning, TEXT( "Failed to find ground position for cell at %s" ), *current_cell.Center.ToString() );
     CurrentCellIndex++;
     return ProcessNextCell();
 }
@@ -210,7 +207,7 @@ void ALevelStatsCollector::CaptureCurrentView()
 {
     if ( CaptureComponent == nullptr || CaptureComponent->TextureTarget == nullptr )
     {
-        UE_LOG( LogTemp, Error, TEXT( "Invalid capture component or render target!" ) );
+        UE_LOG( LogLevelStatsCollector, Error, TEXT( "Invalid capture component or render target!" ) );
         return;
     }
 
@@ -222,20 +219,20 @@ void ALevelStatsCollector::CaptureCurrentView()
     FImage image;
     if ( !FImageUtils::GetRenderTargetImage( Cast< UTextureRenderTarget >( CaptureComponent->TextureTarget ), image ) )
     {
-        UE_LOG( LogTemp, Error, TEXT( "Failed to get render target image for cell %d rotation %.0f" ), CurrentCellIndex, CurrentRotation );
+        UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to get render target image for cell %d rotation %.0f" ), CurrentCellIndex, CurrentRotation );
         return;
     }
 
-    const auto screenshot_path = current_path + TEXT( "screenshot.png" );
+    const auto screenshot_path = FString::Printf( TEXT( "%sscreenshot.png" ), *current_path );
     if ( FImageUtils::SaveImageByExtension( *screenshot_path, image ) )
     {
         const auto & current_cell = GridCells[ CurrentCellIndex ];
-        UE_LOG( LogTemp, Log, TEXT( "Image captured at coordinates (%f, %f, %f), saved to: %s" ), current_cell.Center.X, current_cell.Center.Y, current_cell.Center.Z, *screenshot_path );
+        UE_LOG( LogLevelStatsCollector, Log, TEXT( "Image captured at coordinates (%f, %f, %f), saved to: %s" ), current_cell.Center.X, current_cell.Center.Y, current_cell.Center.Z, *screenshot_path );
         TotalCaptureCount++;
     }
     else
     {
-        UE_LOG( LogTemp, Error, TEXT( "Failed to save image: %s" ), *screenshot_path );
+        UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to save image: %s" ), *screenshot_path );
     }
 }
 
@@ -292,7 +289,7 @@ void ALevelStatsCollector::SetupSceneCapture() const
 {
     if ( CaptureComponent == nullptr )
     {
-        UE_LOG( LogTemp, Error, TEXT( "CaptureComponent is not set!" ) );
+        UE_LOG( LogLevelStatsCollector, Error, TEXT( "CaptureComponent is not set!" ) );
         return;
     }
 
@@ -362,7 +359,7 @@ void ALevelStatsCollector::CalculateGridBounds()
         {
             GridBounds.Max = GridBounds.Min + FVector( expected_size_x, expected_size_y, 0.0f );
 
-            UE_LOG( LogTemp, Warning, TEXT( "Grid size adjusted for cell alignment. Original: (%f, %f), Adjusted: (%f, %f)" ), actual_size_x, actual_size_y, expected_size_x, expected_size_y );
+            UE_LOG( LogLevelStatsCollector, Warning, TEXT( "Grid size adjusted for cell alignment. Original: (%f, %f), Adjusted: (%f, %f)" ), actual_size_x, actual_size_y, expected_size_x, expected_size_y );
         }
 
         GridSizeX = expected_size_x;
@@ -379,7 +376,7 @@ void ALevelStatsCollector::CalculateGridBounds()
             FVector( -half_size_x, -half_size_y, 0.0f ),
             FVector( half_size_x, half_size_y, 0.0f ) );
 
-        UE_LOG( LogTemp, Log, TEXT( "Using explicit grid dimensions: %f x %f" ), GridSizeX, GridSizeY );
+        UE_LOG( LogLevelStatsCollector, Log, TEXT( "Using explicit grid dimensions: %f x %f" ), GridSizeX, GridSizeY );
         finalize_bounds();
         return;
     }
@@ -392,7 +389,7 @@ void ALevelStatsCollector::CalculateGridBounds()
             level_bounds = level_bounds_actor->GetComponentsBoundingBox( true );
             if ( level_bounds.IsValid )
             {
-                UE_LOG( LogTemp, Log, TEXT( "Got bounds from LevelBoundsActor: %s" ), *level_bounds.ToString() );
+                UE_LOG( LogLevelStatsCollector, Log, TEXT( "Got bounds from LevelBoundsActor: %s" ), *level_bounds.ToString() );
                 finalize_bounds();
                 return;
             }
@@ -400,8 +397,8 @@ void ALevelStatsCollector::CalculateGridBounds()
     }
 
     // :NOTE: Use default area if no bounds found
-    UE_LOG( LogTemp, Warning, TEXT( "No valid bounds source found, using default 10000x10000 area" ) );
-    level_bounds = FBox( FVector( -5000, -5000, 0 ), FVector( 5000, 5000, 0 ) );
+    UE_LOG( LogLevelStatsCollector, Warning, TEXT( "No valid bounds source found, using default 10000x10000 area" ) );
+    level_bounds = FBox( FVector( -5000, -5000, 0 ), FVector( 5000, 5000, 0 ) ); // Arbitrary default area
     finalize_bounds();
 }
 
@@ -444,7 +441,7 @@ void ALevelStatsCollector::AddRotationToReport()
 {
     if ( !CurrentPerformanceChart.IsValid() || !CurrentCellObject.IsValid() )
     {
-        UE_LOG( LogTemp, Warning, TEXT( "AddRotationToReport: Invalid performance chart or cell object" ) );
+        UE_LOG( LogLevelStatsCollector, Warning, TEXT( "AddRotationToReport: Invalid performance chart or cell object" ) );
         return;
     }
 
@@ -457,12 +454,11 @@ void ALevelStatsCollector::AddRotationToReport()
 
     rotation_object->SetObjectField( "Metrics", CurrentPerformanceChart->GetMetricsJson() );
 
-    const TArray< TSharedPtr< FJsonValue > > * existing_array = nullptr;
-    if ( CurrentCellObject->TryGetArrayField( TEXT( "Rotations" ), existing_array ) )
+    if ( CurrentCellObject.IsValid() )
     {
-        auto UpdatedArray = *existing_array;
-        UpdatedArray.Add( MakeShared< FJsonValueObject >( rotation_object ) );
-        CurrentCellObject->SetArrayField( TEXT( "Rotations" ), UpdatedArray );
+        auto rotations = CurrentCellObject->GetArrayField( TEXT( "Rotations" ) );
+        rotations.Add( MakeShared< FJsonValueObject >( rotation_object ) );
+        CurrentCellObject->SetArrayField( TEXT( "Rotations" ), rotations );
     }
 
     SaveRotationMetrics( rotation_object );
@@ -472,7 +468,7 @@ void ALevelStatsCollector::FinalizeAndSaveReport() const
 {
     if ( !CaptureReport.IsValid() )
     {
-        UE_LOG( LogTemp, Error, TEXT( "FinalizeAndSaveReport: CaptureReport is invalid" ) );
+        UE_LOG( LogLevelStatsCollector, Error, TEXT( "FinalizeAndSaveReport: CaptureReport is invalid" ) );
         return;
     }
 
@@ -486,7 +482,7 @@ void ALevelStatsCollector::FinalizeAndSaveReport() const
     const auto json_path = GetJsonOutputPath();
     if ( FFileHelper::SaveStringToFile( output_string, *json_path ) )
     {
-        UE_LOG( LogTemp, Log, TEXT( "Saved capture report to: %s" ), *json_path );
+        UE_LOG( LogLevelStatsCollector, Log, TEXT( "Saved capture report to: %s" ), *json_path );
     }
 }
 
@@ -494,7 +490,7 @@ void ALevelStatsCollector::SaveRotationMetrics( const TSharedPtr< FJsonObject > 
 {
     if ( !rotation_object.IsValid() )
     {
-        UE_LOG( LogTemp, Error, TEXT( "SaveRotationMetrics: Invalid rotation object" ) );
+        UE_LOG( LogLevelStatsCollector, Error, TEXT( "SaveRotationMetrics: Invalid rotation object" ) );
         return;
     }
 
@@ -526,28 +522,27 @@ void ALevelStatsCollector::SaveRotationMetrics( const TSharedPtr< FJsonObject > 
 
     if ( FFileHelper::SaveStringToFile( output_string, *metrics_path ) )
     {
-        UE_LOG( LogTemp, Log, TEXT( "Saved rotation metrics to: %s" ), *metrics_path );
+        UE_LOG( LogLevelStatsCollector, Log, TEXT( "Saved rotation metrics to: %s" ), *metrics_path );
     }
     else
     {
-        UE_LOG( LogTemp, Error, TEXT( "Failed to save rotation metrics to: %s" ), *metrics_path );
+        UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to save rotation metrics to: %s" ), *metrics_path );
     }
 }
 
 FString ALevelStatsCollector::GetBasePath() const
 {
-    const FString base_path = TEXT( "Saved/LevelStatsCollector/" );
-    return FPaths::ProjectDir() + base_path;
+    return FString::Printf( TEXT( "%sSaved/LevelStatsCollector/" ), *FPaths::ProjectDir() );
 }
 
 FString ALevelStatsCollector::GetCurrentCellPath() const
 {
-    return GetBasePath() + FString::Printf( TEXT( "Cell_%d/" ), CurrentCellIndex );
+    return FString::Printf( TEXT( "%sCell_%d/" ), *GetBasePath(), CurrentCellIndex );
 }
 
 FString ALevelStatsCollector::GetCurrentRotationPath() const
 {
-    return GetCurrentCellPath() + FString::Printf( TEXT( "Rotation_%.0f/" ), CurrentRotation );
+    return FString::Printf( TEXT( "%sRotation_%.0f/" ), *GetCurrentCellPath(), CurrentRotation );
 }
 
 FString ALevelStatsCollector::GetJsonOutputPath() const
@@ -557,18 +552,18 @@ FString ALevelStatsCollector::GetJsonOutputPath() const
 
 void ALevelStatsCollector::LogGridInfo() const
 {
-    UE_LOG( LogTemp, Log, TEXT( "Grid Configuration:" ) );
-    UE_LOG( LogTemp, Log, TEXT( "  Bounds: Min(%s), Max(%s)" ), *GridBounds.Min.ToString(), *GridBounds.Max.ToString() );
-    UE_LOG( LogTemp, Log, TEXT( "  Dimensions: %dx%d cells" ), GridDimensions.X, GridDimensions.Y );
-    UE_LOG( LogTemp, Log, TEXT( "  Cell Size: %f" ), CellSize );
-    UE_LOG( LogTemp, Log, TEXT( "  Total Cells: %d" ), GridCells.Num() );
-    UE_LOG( LogTemp, Log, TEXT( "  Center Offset: %s" ), *GridCenterOffset.ToString() );
-    UE_LOG( LogTemp, Log, TEXT( "Camera Configuration:" ) );
-    UE_LOG( LogTemp, Log, TEXT( "  Height: %f" ), CameraHeight );
-    UE_LOG( LogTemp, Log, TEXT( "  Height Offset: %f" ), CameraHeightOffset );
-    UE_LOG( LogTemp, Log, TEXT( "  Rotation Delta: %f" ), CameraRotationDelta );
-    UE_LOG( LogTemp, Log, TEXT( "Capture Configuration:" ) );
-    UE_LOG( LogTemp, Log, TEXT( "  Capture Delay: %f" ), CaptureDelay );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "Grid Configuration:" ) );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Bounds: Min(%s), Max(%s)" ), *GridBounds.Min.ToString(), *GridBounds.Max.ToString() );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Dimensions: %dx%d cells" ), GridDimensions.X, GridDimensions.Y );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Cell Size: %f" ), CellSize );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Total Cells: %d" ), GridCells.Num() );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Center Offset: %s" ), *GridCenterOffset.ToString() );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "Camera Configuration:" ) );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Height: %f" ), CameraHeight );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Height Offset: %f" ), CameraHeightOffset );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Rotation Delta: %f" ), CameraRotationDelta );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "Capture Configuration:" ) );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Capture Delay: %f" ), CaptureDelay );
 }
 
 //    void CaptureMetrics() const

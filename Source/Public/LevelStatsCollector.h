@@ -11,7 +11,7 @@ class FJsonObject;
 class FPerformanceMetricsCapture final : public FPerformanceTrackingChart
 {
 public:
-    FPerformanceMetricsCapture( const FDateTime & in_start_time, const FString & in_chart_label );
+    FPerformanceMetricsCapture( const FDateTime & start_time, const FStringView chart_label );
     TSharedPtr< FJsonObject > GetMetricsJson() const;
     void CaptureMetrics() const;
 
@@ -19,10 +19,18 @@ private:
     TSharedPtr< FJsonObject > MetricsObject;
 };
 
+DECLARE_LOG_CATEGORY_EXTERN( LogLevelStatsCollector, Log, All );
+
 UCLASS()
 class MAPMETRICSGENERATION_API ALevelStatsCollector final : public AActor
 {
     GENERATED_BODY()
+
+    friend class FIdleState;
+    friend class FWaitingForSnapshotState;
+    friend class FCapturingMetricsState;
+    friend class FProcessingNextRotationState;
+    friend class FProcessingNextCellState;
 
 public:
     ALevelStatsCollector();
@@ -31,31 +39,23 @@ public:
     void BeginPlay() override;
     void Tick( float delta_time ) override;
 
-    // :NOTE: State machine accessors
-    float GetMetricsWaitDelay() const;
-    float GetMetricsDuration() const;
-    float GetCaptureDelay() const;
-    float GetCurrentRotation() const;
-
-    // :NOTE: State machine operations
     void TransitionToState( const TSharedPtr< FLevelStatsCollectorState > & new_state );
+
+private:
     void UpdateRotation();
     void IncrementCellIndex();
     void FinishCapture();
-    bool ProcessNextCell();
-    void CaptureCurrentView();
 
-    // :NOTE: Metrics operations
     void StartMetricsCapture();
     void FinishMetricsCapture();
+    void CaptureCurrentView();
+    bool ProcessNextCell();
 
-private:
     void InitializeGrid();
     void SetupSceneCapture() const;
     TOptional< FVector > TraceGroundPosition( const FVector & start_location ) const;
     void CalculateGridBounds();
 
-    // :NOTE: JSON Reporting
     void InitializeJsonReport();
     void AddCellToReport();
     void AddRotationToReport();
@@ -87,15 +87,12 @@ private:
     UPROPERTY()
     USceneCaptureComponent2D * CaptureComponent;
 
-    // :NOTE: State management
     TSharedPtr< FLevelStatsCollectorState > CurrentState;
     TSharedPtr< FPerformanceMetricsCapture > CurrentPerformanceChart;
 
-    // :NOTE: JSON reporting
     TSharedPtr< FJsonObject > CaptureReport;
     TSharedPtr< FJsonObject > CurrentCellObject;
 
-    // :NOTE: Grid settings
     TArray< FGridCell > GridCells;
     FIntPoint GridDimensions;
     FVector GridCenterOffset;
@@ -104,17 +101,14 @@ private:
     float GridSizeY;
     float CellSize;
 
-    // :NOTE: Camera settings
     float CameraHeight;
     float CameraHeightOffset;
     float CameraRotationDelta;
 
-    // :NOTE: Capture settings
     float CaptureDelay;
     float MetricsDuration;
     float MetricsWaitDelay;
 
-    // :NOTE: State tracking
     int32 TotalCaptureCount;
     int32 CurrentCellIndex;
     float CurrentRotation;
@@ -123,8 +117,8 @@ private:
     bool IsCollectorInitialized;
 };
 
-FORCEINLINE FPerformanceMetricsCapture::FPerformanceMetricsCapture( const FDateTime & in_start_time, const FString & in_chart_label ) :
-    FPerformanceTrackingChart( in_start_time, in_chart_label )
+FORCEINLINE FPerformanceMetricsCapture::FPerformanceMetricsCapture( const FDateTime & start_time, const FStringView chart_label ) :
+    FPerformanceTrackingChart( start_time, FString( chart_label ) )
 {
     MetricsObject = MakeShared< FJsonObject >();
 }
@@ -132,24 +126,4 @@ FORCEINLINE FPerformanceMetricsCapture::FPerformanceMetricsCapture( const FDateT
 FORCEINLINE TSharedPtr< FJsonObject > FPerformanceMetricsCapture::GetMetricsJson() const
 {
     return MetricsObject;
-}
-
-FORCEINLINE float ALevelStatsCollector::GetMetricsWaitDelay() const
-{
-    return MetricsWaitDelay;
-}
-
-FORCEINLINE float ALevelStatsCollector::GetMetricsDuration() const
-{
-    return MetricsDuration;
-}
-
-FORCEINLINE float ALevelStatsCollector::GetCaptureDelay() const
-{
-    return CaptureDelay;
-}
-
-FORCEINLINE float ALevelStatsCollector::GetCurrentRotation() const
-{
-    return CurrentRotation;
 }
