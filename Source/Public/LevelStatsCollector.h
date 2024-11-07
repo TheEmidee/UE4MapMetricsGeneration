@@ -5,6 +5,8 @@
 
 #include "LevelStatsCollector.generated.h"
 
+class FLevelStatsCollectorState;
+
 class FPerformanceMetricsCapture final : public FPerformanceTrackingChart
 {
 public:
@@ -26,13 +28,26 @@ public:
 
     void PostInitializeComponents() override;
     void BeginPlay() override;
-    void Tick( float DeltaTime ) override;
+    void Tick( float delta_time ) override;
+
+    float GetMetricsWaitDelay() const;
+    float GetMetricsDuration() const;
+    float GetCaptureDelay() const;
+    float GetCurrentRotation() const;
+
+    void TransitionToState( const TSharedPtr< FLevelStatsCollectorState > & new_state );
+    void UpdateRotation();
+    void IncrementCellIndex();
+    void FinishCapture();
+
+    void StartMetricsCapture();
+    void FinishMetricsCapture();
+    void CaptureCurrentView();
+    bool ProcessNextCell();
 
 private:
     void InitializeGrid();
     void SetupSceneCapture() const;
-    bool ProcessNextCell();
-    void CaptureCurrentView();
     TOptional< FVector > TraceGroundPosition( const FVector & start_location ) const;
     void CalculateGridBounds();
 
@@ -69,20 +84,18 @@ private:
         float GroundHeight;
     };
 
-    enum class ECaptureState
-    {
-        Idle,
-        CapturingMetrics,
-        WaitingForSnapshot,
-        ProcessingNextRotation,
-        ProcessingNextCell
-    };
-
     UPROPERTY()
     USceneCaptureComponent2D * CaptureComponent;
 
-    ECaptureState CurrentState;
-    TSharedPtr< FPerformanceMetricsCapture > CurrentPerformanceChart;
+    TSharedPtr< FLevelStatsCollectorState > CurrentState;
+    TSharedPtr< FCustomPerformanceChart > CurrentPerformanceChart;
+    TArray< FGridCell > GridCells;
+    FVector GridCenterOffset;
+    int32 TotalCaptureCount;
+    int32 CurrentCellIndex;
+    FIntPoint GridDimensions;
+    FBox GridBounds;
+
     float CurrentMetricsCaptureTime;
     float MetricsDuration;
     float MetricsWaitDelay;
@@ -92,20 +105,15 @@ private:
     float GridSizeX;
     float GridSizeY;
     float CellSize;
-    FVector GridCenterOffset;
     float CameraHeight;
     float CameraHeightOffset;
     float CameraRotationDelta;
     float CaptureDelay;
-    TArray< FGridCell > GridCells;
-    int32 CurrentCellIndex;
     float CurrentRotation;
     float CurrentCaptureDelay;
-    FBox GridBounds;
-    FIntPoint GridDimensions;
-    int32 TotalCaptureCount;
-    bool bIsCapturing;
-    bool bIsInitialized;
+
+    bool IsCaptureInProgress;
+    bool IsCollectorInitialized;
 };
 
 FORCEINLINE FPerformanceMetricsCapture::FPerformanceMetricsCapture( const FDateTime & in_start_time, const FString & in_chart_label ) :
@@ -117,4 +125,23 @@ FORCEINLINE FPerformanceMetricsCapture::FPerformanceMetricsCapture( const FDateT
 FORCEINLINE TSharedPtr< FJsonObject > FPerformanceMetricsCapture::GetMetricsJson() const
 {
     return MetricsObject;
+}
+FORCEINLINE float ALevelStatsCollector::GetMetricsWaitDelay() const
+{
+    return MetricsWaitDelay;
+}
+
+FORCEINLINE float ALevelStatsCollector::GetMetricsDuration() const
+{
+    return MetricsDuration;
+}
+
+FORCEINLINE float ALevelStatsCollector::GetCaptureDelay() const
+{
+    return CaptureDelay;
+}
+
+FORCEINLINE float ALevelStatsCollector::GetCurrentRotation() const
+{
+    return CurrentRotation;
 }
