@@ -464,78 +464,81 @@ void ALevelStatsCollector::LogGridInfo() const
     UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Capture Delay: %f" ), Settings.CaptureDelay );
 }
 
-//    void CaptureMetrics() const
-// {
-//     // Basic metrics (existing)
-//     MetricsObject->SetNumberField("AverageFramerate", GetAverageFramerate());
-//     MetricsObject->SetNumberField("TotalFrames", GetNumFrames());
-//     MetricsObject->SetNumberField("TimeDisregarded", TimeDisregarded);
-//     MetricsObject->SetNumberField("FramesDisregarded", FramesDisregarded);
-//
-//     // Detailed timing metrics
-//     TSharedPtr<FJsonObject> TimingObject = MakeShared<FJsonObject>();
-//     TimingObject->SetNumberField("AverageGameThreadTime", TotalFrameTime_GameThread / GetNumFrames() * 1000.0f);
-//     TimingObject->SetNumberField("AverageRenderThreadTime", TotalFrameTime_RenderThread / GetNumFrames() * 1000.0f);
-//     TimingObject->SetNumberField("AverageRHIThreadTime", TotalFrameTime_RHIThread / GetNumFrames() * 1000.0f);
-//     TimingObject->SetNumberField("AverageGPUTime", TotalFrameTime_GPU / GetNumFrames() * 1000.0f);
-//     TimingObject->SetNumberField("TotalGameThreadTime", TotalFrameTime_GameThread * 1000.0f);
-//     TimingObject->SetNumberField("TotalRenderThreadTime", TotalFrameTime_RenderThread * 1000.0f);
-//     TimingObject->SetNumberField("TotalRHIThreadTime", TotalFrameTime_RHIThread * 1000.0f);
-//     TimingObject->SetNumberField("TotalGPUTime", TotalFrameTime_GPU * 1000.0f);
-//     MetricsObject->SetObjectField("Timing", TimingObject);
-//
-//     // Thread boundedness
-//     TSharedPtr<FJsonObject> BoundObject = MakeShared<FJsonObject>();
-//     BoundObject->SetNumberField("GameThreadBound", static_cast<float>(NumFramesBound_GameThread) / GetNumFrames() * 100.0f);
-//     BoundObject->SetNumberField("RenderThreadBound", static_cast<float>(NumFramesBound_RenderThread) / GetNumFrames() * 100.0f);
-//     BoundObject->SetNumberField("RHIThreadBound", static_cast<float>(NumFramesBound_RHIThread) / GetNumFrames() * 100.0f);
-//     BoundObject->SetNumberField("GPUBound", static_cast<float>(NumFramesBound_GPU) / GetNumFrames() * 100.0f);
-//     BoundObject->SetNumberField("TotalGameThreadBoundFrames", NumFramesBound_GameThread);
-//     BoundObject->SetNumberField("TotalRenderThreadBoundFrames", NumFramesBound_RenderThread);
-//     BoundObject->SetNumberField("TotalRHIThreadBoundFrames", NumFramesBound_RHIThread);
-//     BoundObject->SetNumberField("TotalGPUBoundFrames", NumFramesBound_GPU);
-//     MetricsObject->SetObjectField("BoundPercentages", BoundObject);
-//
-//     // Hitching metrics
-//     TSharedPtr<FJsonObject> HitchObject = MakeShared<FJsonObject>();
-//     HitchObject->SetNumberField("TotalHitches", GetNumHitches());
-//     HitchObject->SetNumberField("HitchesPerMinute", GetAvgHitchesPerMinute());
-//     HitchObject->SetNumberField("PercentTimeHitching", GetPercentHitchTime());
-//     HitchObject->SetNumberField("TotalHitchTime", GetTotalHitchFrameTime());
-//     HitchObject->SetNumberField("AverageHitchFrameLength", GetAvgHitchFrameLength());
-//     HitchObject->SetNumberField("GameThreadBoundHitches", TotalGameThreadBoundHitchCount);
-//     HitchObject->SetNumberField("RenderThreadBoundHitches", TotalRenderThreadBoundHitchCount);
-//     HitchObject->SetNumberField("RHIThreadBoundHitches", TotalRHIThreadBoundHitchCount);
-//     HitchObject->SetNumberField("GPUBoundHitches", TotalGPUBoundHitchCount);
-//     MetricsObject->SetObjectField("Hitching", HitchObject);
-//
-//     // Memory metrics (if available)
-//     TSharedPtr<FJsonObject> MemoryObject = MakeShared<FJsonObject>();
-//     MemoryObject->SetNumberField("MaxPhysicalMemory", MaxPhysicalMemory);
-//     MemoryObject->SetNumberField("MinPhysicalMemory", MinPhysicalMemory);
-//     MemoryObject->SetNumberField("MaxVirtualMemory", MaxVirtualMemory);
-//     MemoryObject->SetNumberField("MinVirtualMemory", MinVirtualMemory);
-//     MemoryObject->SetNumberField("MinAvailablePhysicalMemory", MinAvailablePhysicalMemory);
-//     MemoryObject->SetNumberField("TotalPhysicalMemoryUsed", TotalPhysicalMemoryUsed);
-//     MemoryObject->SetNumberField("TotalVirtualMemoryUsed", TotalVirtualMemoryUsed);
-//     MemoryObject->SetNumberField("FramesAtCriticalMemoryPressure", NumFramesAtCriticalMemoryPressure);
-//     MetricsObject->SetObjectField("Memory", MemoryObject);
-//
-//     // Draw call and primitive metrics
-//     TSharedPtr<FJsonObject> RenderingObject = MakeShared<FJsonObject>();
-//     RenderingObject->SetNumberField("MaxDrawCalls", MaxDrawCalls);
-//     RenderingObject->SetNumberField("MinDrawCalls", MinDrawCalls);
-//     RenderingObject->SetNumberField("TotalDrawCalls", TotalDrawCalls);
-//     RenderingObject->SetNumberField("MaxDrawnPrimitives", MaxDrawnPrimitives);
-//     RenderingObject->SetNumberField("MinDrawnPrimitives", MinDrawnPrimitives);
-//     RenderingObject->SetNumberField("TotalDrawnPrimitives", TotalDrawnPrimitives);
-//     MetricsObject->SetObjectField("Rendering", RenderingObject);
-//
-//     // Async loading metrics
-//     TSharedPtr<FJsonObject> LoadingObject = MakeShared<FJsonObject>();
-//     LoadingObject->SetNumberField("TotalFlushAsyncLoadingTime", TotalFlushAsyncLoadingTime);
-//     LoadingObject->SetNumberField("MaxFlushAsyncLoadingTime", MaxFlushAsyncLoadingTime);
-//     LoadingObject->SetNumberField("TotalFlushAsyncLoadingCalls", TotalFlushAsyncLoadingCalls);
-//     LoadingObject->SetNumberField("TotalSyncLoadCount", TotalSyncLoadCount);
-//     MetricsObject->SetObjectField("AsyncLoading", LoadingObject);
-// }
+// :NOTE: This is just an example of several metrics that can be captured -- To be deleted in the future
+/*
+   void CaptureMetrics() const
+{
+    // Basic metrics (existing)
+    MetricsObject->SetNumberField("AverageFramerate", GetAverageFramerate());
+    MetricsObject->SetNumberField("TotalFrames", GetNumFrames());
+    MetricsObject->SetNumberField("TimeDisregarded", TimeDisregarded);
+    MetricsObject->SetNumberField("FramesDisregarded", FramesDisregarded);
+
+    // Detailed timing metrics
+    TSharedPtr<FJsonObject> TimingObject = MakeShared<FJsonObject>();
+    TimingObject->SetNumberField("AverageGameThreadTime", TotalFrameTime_GameThread / GetNumFrames() * 1000.0f);
+    TimingObject->SetNumberField("AverageRenderThreadTime", TotalFrameTime_RenderThread / GetNumFrames() * 1000.0f);
+    TimingObject->SetNumberField("AverageRHIThreadTime", TotalFrameTime_RHIThread / GetNumFrames() * 1000.0f);
+    TimingObject->SetNumberField("AverageGPUTime", TotalFrameTime_GPU / GetNumFrames() * 1000.0f);
+    TimingObject->SetNumberField("TotalGameThreadTime", TotalFrameTime_GameThread * 1000.0f);
+    TimingObject->SetNumberField("TotalRenderThreadTime", TotalFrameTime_RenderThread * 1000.0f);
+    TimingObject->SetNumberField("TotalRHIThreadTime", TotalFrameTime_RHIThread * 1000.0f);
+    TimingObject->SetNumberField("TotalGPUTime", TotalFrameTime_GPU * 1000.0f);
+    MetricsObject->SetObjectField("Timing", TimingObject);
+
+    // Thread boundedness
+    TSharedPtr<FJsonObject> BoundObject = MakeShared<FJsonObject>();
+    BoundObject->SetNumberField("GameThreadBound", static_cast<float>(NumFramesBound_GameThread) / GetNumFrames() * 100.0f);
+    BoundObject->SetNumberField("RenderThreadBound", static_cast<float>(NumFramesBound_RenderThread) / GetNumFrames() * 100.0f);
+    BoundObject->SetNumberField("RHIThreadBound", static_cast<float>(NumFramesBound_RHIThread) / GetNumFrames() * 100.0f);
+    BoundObject->SetNumberField("GPUBound", static_cast<float>(NumFramesBound_GPU) / GetNumFrames() * 100.0f);
+    BoundObject->SetNumberField("TotalGameThreadBoundFrames", NumFramesBound_GameThread);
+    BoundObject->SetNumberField("TotalRenderThreadBoundFrames", NumFramesBound_RenderThread);
+    BoundObject->SetNumberField("TotalRHIThreadBoundFrames", NumFramesBound_RHIThread);
+    BoundObject->SetNumberField("TotalGPUBoundFrames", NumFramesBound_GPU);
+    MetricsObject->SetObjectField("BoundPercentages", BoundObject);
+
+    // Hitching metrics
+    TSharedPtr<FJsonObject> HitchObject = MakeShared<FJsonObject>();
+    HitchObject->SetNumberField("TotalHitches", GetNumHitches());
+    HitchObject->SetNumberField("HitchesPerMinute", GetAvgHitchesPerMinute());
+    HitchObject->SetNumberField("PercentTimeHitching", GetPercentHitchTime());
+    HitchObject->SetNumberField("TotalHitchTime", GetTotalHitchFrameTime());
+    HitchObject->SetNumberField("AverageHitchFrameLength", GetAvgHitchFrameLength());
+    HitchObject->SetNumberField("GameThreadBoundHitches", TotalGameThreadBoundHitchCount);
+    HitchObject->SetNumberField("RenderThreadBoundHitches", TotalRenderThreadBoundHitchCount);
+    HitchObject->SetNumberField("RHIThreadBoundHitches", TotalRHIThreadBoundHitchCount);
+    HitchObject->SetNumberField("GPUBoundHitches", TotalGPUBoundHitchCount);
+    MetricsObject->SetObjectField("Hitching", HitchObject);
+
+    // Memory metrics (if available)
+    TSharedPtr<FJsonObject> MemoryObject = MakeShared<FJsonObject>();
+    MemoryObject->SetNumberField("MaxPhysicalMemory", MaxPhysicalMemory);
+    MemoryObject->SetNumberField("MinPhysicalMemory", MinPhysicalMemory);
+    MemoryObject->SetNumberField("MaxVirtualMemory", MaxVirtualMemory);
+    MemoryObject->SetNumberField("MinVirtualMemory", MinVirtualMemory);
+    MemoryObject->SetNumberField("MinAvailablePhysicalMemory", MinAvailablePhysicalMemory);
+    MemoryObject->SetNumberField("TotalPhysicalMemoryUsed", TotalPhysicalMemoryUsed);
+    MemoryObject->SetNumberField("TotalVirtualMemoryUsed", TotalVirtualMemoryUsed);
+    MemoryObject->SetNumberField("FramesAtCriticalMemoryPressure", NumFramesAtCriticalMemoryPressure);
+    MetricsObject->SetObjectField("Memory", MemoryObject);
+
+    // Draw call and primitive metrics
+    TSharedPtr<FJsonObject> RenderingObject = MakeShared<FJsonObject>();
+    RenderingObject->SetNumberField("MaxDrawCalls", MaxDrawCalls);
+    RenderingObject->SetNumberField("MinDrawCalls", MinDrawCalls);
+    RenderingObject->SetNumberField("TotalDrawCalls", TotalDrawCalls);
+    RenderingObject->SetNumberField("MaxDrawnPrimitives", MaxDrawnPrimitives);
+    RenderingObject->SetNumberField("MinDrawnPrimitives", MinDrawnPrimitives);
+    RenderingObject->SetNumberField("TotalDrawnPrimitives", TotalDrawnPrimitives);
+    MetricsObject->SetObjectField("Rendering", RenderingObject);
+
+    // Async loading metrics
+    TSharedPtr<FJsonObject> LoadingObject = MakeShared<FJsonObject>();
+    LoadingObject->SetNumberField("TotalFlushAsyncLoadingTime", TotalFlushAsyncLoadingTime);
+    LoadingObject->SetNumberField("MaxFlushAsyncLoadingTime", MaxFlushAsyncLoadingTime);
+    LoadingObject->SetNumberField("TotalFlushAsyncLoadingCalls", TotalFlushAsyncLoadingCalls);
+    LoadingObject->SetNumberField("TotalSyncLoadCount", TotalSyncLoadCount);
+    MetricsObject->SetObjectField("AsyncLoading", LoadingObject);
+}
+*/
