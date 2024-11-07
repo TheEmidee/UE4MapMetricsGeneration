@@ -6,6 +6,7 @@
 #include "LevelStatsCollector.generated.h"
 
 class FLevelStatsCollectorState;
+class FJsonObject;
 
 class FPerformanceMetricsCapture final : public FPerformanceTrackingChart
 {
@@ -30,20 +31,23 @@ public:
     void BeginPlay() override;
     void Tick( float delta_time ) override;
 
+    // :NOTE: State machine accessors
     float GetMetricsWaitDelay() const;
     float GetMetricsDuration() const;
     float GetCaptureDelay() const;
     float GetCurrentRotation() const;
 
+    // :NOTE: State machine operations
     void TransitionToState( const TSharedPtr< FLevelStatsCollectorState > & new_state );
     void UpdateRotation();
     void IncrementCellIndex();
     void FinishCapture();
+    bool ProcessNextCell();
+    void CaptureCurrentView();
 
+    // :NOTE: Metrics operations
     void StartMetricsCapture();
     void FinishMetricsCapture();
-    void CaptureCurrentView();
-    bool ProcessNextCell();
 
 private:
     void InitializeGrid();
@@ -51,10 +55,7 @@ private:
     TOptional< FVector > TraceGroundPosition( const FVector & start_location ) const;
     void CalculateGridBounds();
 
-    void StartMetricsCapture();
-    void ProcessMetricsCapture( float DeltaTime );
-    void FinishMetricsCapture();
-
+    // :NOTE: JSON Reporting
     void InitializeJsonReport();
     void AddCellToReport();
     void AddRotationToReport();
@@ -65,7 +66,6 @@ private:
     FString GetCurrentCellPath() const;
     FString GetCurrentRotationPath() const;
     FString GetJsonOutputPath() const;
-
     void LogGridInfo() const;
 
     struct FGridCell
@@ -87,31 +87,38 @@ private:
     UPROPERTY()
     USceneCaptureComponent2D * CaptureComponent;
 
+    // :NOTE: State management
     TSharedPtr< FLevelStatsCollectorState > CurrentState;
-    TSharedPtr< FCustomPerformanceChart > CurrentPerformanceChart;
-    TArray< FGridCell > GridCells;
-    FVector GridCenterOffset;
-    int32 TotalCaptureCount;
-    int32 CurrentCellIndex;
-    FIntPoint GridDimensions;
-    FBox GridBounds;
+    TSharedPtr< FPerformanceMetricsCapture > CurrentPerformanceChart;
 
-    float CurrentMetricsCaptureTime;
-    float MetricsDuration;
-    float MetricsWaitDelay;
+    // :NOTE: JSON reporting
     TSharedPtr< FJsonObject > CaptureReport;
     TSharedPtr< FJsonObject > CurrentCellObject;
 
+    // :NOTE: Grid settings
+    TArray< FGridCell > GridCells;
+    FIntPoint GridDimensions;
+    FVector GridCenterOffset;
+    FBox GridBounds;
     float GridSizeX;
     float GridSizeY;
     float CellSize;
+
+    // :NOTE: Camera settings
     float CameraHeight;
     float CameraHeightOffset;
     float CameraRotationDelta;
+
+    // :NOTE: Capture settings
     float CaptureDelay;
+    float MetricsDuration;
+    float MetricsWaitDelay;
+
+    // :NOTE: State tracking
+    int32 TotalCaptureCount;
+    int32 CurrentCellIndex;
     float CurrentRotation;
     float CurrentCaptureDelay;
-
     bool IsCaptureInProgress;
     bool IsCollectorInitialized;
 };
@@ -126,6 +133,7 @@ FORCEINLINE TSharedPtr< FJsonObject > FPerformanceMetricsCapture::GetMetricsJson
 {
     return MetricsObject;
 }
+
 FORCEINLINE float ALevelStatsCollector::GetMetricsWaitDelay() const
 {
     return MetricsWaitDelay;

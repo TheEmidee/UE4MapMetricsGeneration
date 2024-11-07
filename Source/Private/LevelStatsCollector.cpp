@@ -2,16 +2,15 @@
 
 #include "LevelStatsCollectorState.h"
 
-#include "Dom/JsonObject.h"
-#include "Dom/JsonValue.h"
-#include "Serialization/JsonSerializer.h"
-#include "Serialization/JsonWriter.h"
-
 #include <Components/SceneCaptureComponent2D.h>
+#include <Dom/JsonObject.h>
+#include <Dom/JsonValue.h>
 #include <Engine/Engine.h>
 #include <Engine/LevelBounds.h>
 #include <Engine/TextureRenderTarget2D.h>
 #include <ImageUtils.h>
+#include <Serialization/JsonSerializer.h>
+#include <Serialization/JsonWriter.h>
 
 void FPerformanceMetricsCapture::CaptureMetrics() const
 {
@@ -81,15 +80,15 @@ void FPerformanceMetricsCapture::CaptureMetrics() const
 
 ALevelStatsCollector::ALevelStatsCollector() :
     GridCenterOffset( FVector::ZeroVector ),
-    TotalCaptureCount( 0 ),
-    CurrentCellIndex( 0 ),
-    MetricsDuration( 5.0f ),
-    MetricsWaitDelay( 1.0f ),
     CellSize( 10000.0f ),
     CameraHeight( 10000.0f ),
     CameraHeightOffset( 250.0f ),
     CameraRotationDelta( 90.0f ),
     CaptureDelay( 0.1f ),
+    MetricsDuration( 5.0f ),
+    MetricsWaitDelay( 1.0f ),
+    TotalCaptureCount( 0 ),
+    CurrentCellIndex( 0 ),
     CurrentRotation( 0.0f ),
     CurrentCaptureDelay( 0.0f ),
     IsCaptureInProgress( false ),
@@ -111,8 +110,9 @@ void ALevelStatsCollector::PostInitializeComponents()
 void ALevelStatsCollector::BeginPlay()
 {
     Super::BeginPlay();
-    TransitionToState( MakeShared< FIdleState >( this ) );
+    IConsoleManager::Get().FindConsoleVariable( TEXT( "t.FPSChart.OpenFolderOnDump" ) )->Set( 0 );
     InitializeJsonReport();
+    TransitionToState( MakeShared< FIdleState >( this ) );
     InitializeGrid();
 }
 
@@ -131,47 +131,33 @@ void ALevelStatsCollector::Tick( const float delta_time )
     }
 }
 
-void ALevelStatsCollector::SetupSceneCapture() const
+void ALevelStatsCollector::TransitionToState( const TSharedPtr< FLevelStatsCollectorState > & new_state )
 {
-    if ( CaptureComponent == nullptr )
+    if ( CurrentState != nullptr )
     {
-        UE_LOG( LogTemp, Error, TEXT( "CaptureComponent is not set!" ) );
-        return;
+        CurrentState->Exit();
     }
 
-    auto * render_target = NewObject< UTextureRenderTarget2D >();
-    render_target->InitCustomFormat( 1920, 1080, PF_B8G8R8A8, false );
-    render_target->TargetGamma = 2.2f;
-    render_target->UpdateResource();
-
-    CaptureComponent->CaptureSource = SCS_FinalColorLDR;
-    CaptureComponent->TextureTarget = render_target;
-    CaptureComponent->FOVAngle = 90.0f;
-    CaptureComponent->bCaptureEveryFrame = false;
+    CurrentState = new_state;
+    CurrentState->Enter();
 }
 
-void ALevelStatsCollector::InitializeGrid()
+void ALevelStatsCollector::UpdateRotation()
 {
-    CalculateGridBounds();
+    CurrentRotation += CameraRotationDelta;
+    CaptureComponent->SetRelativeRotation( FRotator( 0.0f, CurrentRotation, 0.0f ) );
+}
 
-    const auto total_cells = GridDimensions.X * GridDimensions.Y;
-    GridCells.Empty( total_cells );
-
-    for ( auto y = 0; y < GridDimensions.Y; ++y )
-    {
-        for ( auto x = 0; x < GridDimensions.X; ++x )
-        {
-            GridCells.Emplace( GridBounds.Min + FVector( x * CellSize + CellSize / 2, y * CellSize + CellSize / 2, 0.0f ) );
-        }
-    }
-
-    CurrentCellIndex = 0;
+void ALevelStatsCollector::IncrementCellIndex()
+{
+    CurrentCellIndex++;
     CurrentRotation = 0.0f;
-    IsCaptureInProgress = true;
-    IsCollectorInitialized = true;
+}
 
-    LogGridInfo();
-    ProcessNextCell();
+void ALevelStatsCollector::FinishCapture()
+{
+    IsCaptureInProgress = false;
+    UE_LOG( LogTemp, Log, TEXT( "Capture process complete! Total captures: %d" ), TotalCaptureCount );
 }
 
 bool ALevelStatsCollector::ProcessNextCell()
@@ -251,6 +237,74 @@ void ALevelStatsCollector::CaptureCurrentView()
     {
         UE_LOG( LogTemp, Error, TEXT( "Failed to save image: %s" ), *screenshot_path );
     }
+}
+
+void ALevelStatsCollector::StartMetricsCapture()
+{
+    const auto label = FString::Printf( TEXT( "Cell_%d_Rot_%.0f" ), CurrentCellIndex, CurrentRotation );
+
+    if ( CurrentPerformanceChart.IsValid() )
+    {
+        GEngine->RemovePerformanceDataConsumer( CurrentPerformanceChart );
+        CurrentPerformanceChart.Reset();
+    }
+
+    CurrentPerformanceChart = MakeShareable( new FPerformanceMetricsCapture( FDateTime::Now(), label ) );
+
+    GEngine->AddPerformanceDataConsumer( CurrentPerformanceChart );
+}
+
+void ALevelStatsCollector::FinishMetricsCapture()
+{
+    if ( CurrentPerformanceChart.IsValid() )
+    {
+        AddRotationToReport();
+        GEngine->RemovePerformanceDataConsumer( CurrentPerformanceChart );
+        CurrentPerformanceChart.Reset();
+    }
+}
+
+void ALevelStatsCollector::InitializeGrid()
+{
+    CalculateGridBounds();
+
+    const auto total_cells = GridDimensions.X * GridDimensions.Y;
+    GridCells.Empty( total_cells );
+
+    for ( auto y = 0; y < GridDimensions.Y; ++y )
+    {
+        for ( auto x = 0; x < GridDimensions.X; ++x )
+        {
+            GridCells.Emplace( GridBounds.Min + FVector( x * CellSize + CellSize / 2, y * CellSize + CellSize / 2, 0.0f ) );
+        }
+    }
+
+    CurrentCellIndex = 0;
+    CurrentRotation = 0.0f;
+    IsCaptureInProgress = true;
+    IsCollectorInitialized = true;
+
+    LogGridInfo();
+    ProcessNextCell();
+}
+
+void ALevelStatsCollector::SetupSceneCapture() const
+{
+    if ( CaptureComponent == nullptr )
+    {
+        UE_LOG( LogTemp, Error, TEXT( "CaptureComponent is not set!" ) );
+        return;
+    }
+
+    auto * render_target = NewObject< UTextureRenderTarget2D >();
+    render_target->InitCustomFormat( 1920, 1080, PF_B8G8R8A8, false );
+    render_target->TargetGamma = 2.2f;
+    render_target->UpdateResource();
+
+    CaptureComponent->CaptureSource = SCS_FinalColorLDR;
+    CaptureComponent->TextureTarget = render_target;
+    CaptureComponent->FOVAngle = 90.0f;
+    CaptureComponent->bCaptureEveryFrame = false;
 }
 
 TOptional< FVector > ALevelStatsCollector::TraceGroundPosition( const FVector & start_location ) const
@@ -349,62 +403,6 @@ void ALevelStatsCollector::CalculateGridBounds()
     UE_LOG( LogTemp, Warning, TEXT( "No valid bounds source found, using default 10000x10000 area" ) );
     level_bounds = FBox( FVector( -5000, -5000, 0 ), FVector( 5000, 5000, 0 ) );
     finalize_bounds();
-}
-
-void ALevelStatsCollector::TransitionToState( const TSharedPtr< FLevelStatsCollectorState > & new_state )
-{
-    if ( CurrentState != nullptr )
-    {
-        CurrentState->Exit();
-    }
-
-    CurrentState = new_state;
-    CurrentState->Enter();
-}
-
-void ALevelStatsCollector::UpdateRotation()
-{
-    CurrentRotation += CameraRotationDelta;
-    CaptureComponent->SetRelativeRotation( FRotator( 0.0f, CurrentRotation, 0.0f ) );
-}
-
-void ALevelStatsCollector::IncrementCellIndex()
-{
-    CurrentCellIndex++;
-    CurrentRotation = 0.0f;
-}
-
-void ALevelStatsCollector::FinishCapture()
-{
-    IsCaptureInProgress = false;
-    UE_LOG( LogTemp, Log, TEXT( "Capture process complete! Total captures: %d" ), TotalCaptureCount );
-}
-
-void ALevelStatsCollector::StartMetricsCapture()
-{
-    const auto label = FString::Printf( TEXT( "Cell_%d_Rot_%.0f" ), CurrentCellIndex, CurrentRotation );
-
-    if ( CurrentPerformanceChart.IsValid() )
-    {
-        GEngine->RemovePerformanceDataConsumer( CurrentPerformanceChart );
-        CurrentPerformanceChart.Reset();
-    }
-
-    CurrentPerformanceChart = MakeShareable( new FPerformanceMetricsCapture(
-        FDateTime::Now(),
-        label ) );
-
-    GEngine->AddPerformanceDataConsumer( CurrentPerformanceChart );
-}
-
-void ALevelStatsCollector::FinishMetricsCapture()
-{
-    if ( CurrentPerformanceChart.IsValid() )
-    {
-        AddRotationToReport();
-        GEngine->RemovePerformanceDataConsumer( CurrentPerformanceChart );
-        CurrentPerformanceChart.Reset();
-    }
 }
 
 void ALevelStatsCollector::InitializeJsonReport()
