@@ -6,22 +6,35 @@
 #include "LevelStatsCollector.generated.h"
 
 class FLevelStatsCollectorState;
+class FIdleState;
+class FWaitingForSnapshotState;
+class FProcessingNextRotationState;
+class FProcessingNextCellState;
+class FCapturingMetricsState;
 
 class FCustomPerformanceChart final : public FPerformanceTrackingChart
 {
 public:
-    FCustomPerformanceChart( const FDateTime & in_start_time, const FString & in_chart_label, const FString & in_output_path );
-    void DumpFPSChartToCustomLocation( const FString & in_map_name );
+    FCustomPerformanceChart( const FDateTime & start_time, FStringView chart_label, FStringView output_path );
+    void DumpFPSChartToCustomLocation( FStringView map_name );
 
 private:
-    static FString CreateFileNameForChart( const FString & /* chart_type */, const FString & /* in_map_name */, const FString & file_extension );
+    static FString CreateFileNameForChart( FStringView chart_type, FStringView in_map_name, FStringView file_extension );
     FString CustomOutputPath;
 };
+
+DECLARE_LOG_CATEGORY_EXTERN( LogLevelStatsCollector, Log, All );
 
 UCLASS()
 class MAPMETRICSGENERATION_API ALevelStatsCollector final : public AActor
 {
     GENERATED_BODY()
+
+    friend class FIdleState;
+    friend class FWaitingForSnapshotState;
+    friend class FCapturingMetricsState;
+    friend class FProcessingNextRotationState;
+    friend class FProcessingNextCellState;
 
 public:
     ALevelStatsCollector();
@@ -30,12 +43,9 @@ public:
     void BeginPlay() override;
     void Tick( float delta_time ) override;
 
-    float GetMetricsWaitDelay() const;
-    float GetMetricsDuration() const;
-    float GetCaptureDelay() const;
-    float GetCurrentRotation() const;
-
     void TransitionToState( const TSharedPtr< FLevelStatsCollectorState > & new_state );
+
+private:
     void UpdateRotation();
     void IncrementCellIndex();
     void FinishCapture();
@@ -45,7 +55,6 @@ public:
     void CaptureCurrentView();
     bool ProcessNextCell();
 
-private:
     void InitializeGrid();
     void SetupSceneCapture() const;
     TOptional< FVector > TraceGroundPosition( const FVector & start_location ) const;
@@ -100,23 +109,3 @@ private:
     bool IsCaptureInProgress;
     bool IsCollectorInitialized;
 };
-
-FORCEINLINE float ALevelStatsCollector::GetMetricsWaitDelay() const
-{
-    return MetricsWaitDelay;
-}
-
-FORCEINLINE float ALevelStatsCollector::GetMetricsDuration() const
-{
-    return MetricsDuration;
-}
-
-FORCEINLINE float ALevelStatsCollector::GetCaptureDelay() const
-{
-    return CaptureDelay;
-}
-
-FORCEINLINE float ALevelStatsCollector::GetCurrentRotation() const
-{
-    return CurrentRotation;
-}

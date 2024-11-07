@@ -8,41 +8,45 @@
 #include <Engine/TextureRenderTarget2D.h>
 #include <ImageUtils.h>
 
-FCustomPerformanceChart::FCustomPerformanceChart( const FDateTime & in_start_time, const FString & in_chart_label, const FString & in_output_path ) :
-    FPerformanceTrackingChart( in_start_time, in_chart_label ),
-    CustomOutputPath( in_output_path )
+DEFINE_LOG_CATEGORY( LogLevelStatsCollector );
+
+FCustomPerformanceChart::FCustomPerformanceChart( const FDateTime & start_time, FStringView chart_label, FStringView output_path ) :
+    FPerformanceTrackingChart( start_time, FString( chart_label ) ),
+    CustomOutputPath( output_path )
 {
 }
 
-void FCustomPerformanceChart::DumpFPSChartToCustomLocation( const FString & in_map_name )
+void FCustomPerformanceChart::DumpFPSChartToCustomLocation( FStringView map_name )
 {
     TArray< const FPerformanceTrackingChart * > charts;
     charts.Add( this );
 
-    DumpChartsToOutputLog( AccumulatedChartTime, charts, in_map_name );
+    DumpChartsToOutputLog( AccumulatedChartTime, charts, FString( map_name ) );
 
 #if ALLOW_DEBUG_FILES
     IFileManager::Get().MakeDirectory( *CustomOutputPath, true );
 
     {
-        const auto log_filename = CustomOutputPath / CreateFileNameForChart( TEXT( "FPS" ), in_map_name, TEXT( ".log" ) );
-        DumpChartsToLogFile( AccumulatedChartTime, charts, in_map_name, log_filename );
+        const auto log_filename = CustomOutputPath / CreateFileNameForChart( TEXT( "FPS" ), map_name, TEXT( ".log" ) );
+        DumpChartsToLogFile( AccumulatedChartTime, charts, FString( map_name ), log_filename );
     }
 
     {
-        const auto map_and_chart_label = ChartLabel.IsEmpty() ? in_map_name : ( ChartLabel + TEXT( "-" ) + in_map_name );
-        const auto html_filename = CustomOutputPath / CreateFileNameForChart( TEXT( "FPS" ),
-                                                          *( map_and_chart_label + TEXT( "-" ) + CaptureStartTime.ToString() ),
-                                                          TEXT( ".html" ) );
+        const auto map_and_chart_label = ChartLabel.IsEmpty()
+                                             ? FString( map_name )
+                                             : FString::Printf( TEXT( "%s-%s" ), *ChartLabel, *FString( map_name ) );
+        const auto html_filename = CustomOutputPath / CreateFileNameForChart(
+                                                          TEXT( "FPS" ),
+                                                          map_name,
+                                                          FString::Printf( TEXT( "-%s.html" ), *CaptureStartTime.ToString() ) );
         DumpChartsToHTML( AccumulatedChartTime, charts, map_and_chart_label, html_filename );
     }
 #endif
 }
 
-FString FCustomPerformanceChart::CreateFileNameForChart( const FString & /* chart_type */, const FString & /* in_map_name */, const FString & file_extension )
+FString FCustomPerformanceChart::CreateFileNameForChart( FStringView, FStringView, FStringView file_extension )
 {
-    const FString platform = FPlatformProperties::PlatformName();
-    return TEXT( "metrics" ) + file_extension;
+    return FString::Printf( TEXT( "metrics%s" ), *FString( file_extension ) );
 }
 
 ALevelStatsCollector::ALevelStatsCollector() :
@@ -101,7 +105,7 @@ void ALevelStatsCollector::SetupSceneCapture() const
 {
     if ( CaptureComponent == nullptr )
     {
-        UE_LOG( LogTemp, Error, TEXT( "CaptureComponent is not set!" ) );
+        UE_LOG( LogLevelStatsCollector, Error, TEXT( "CaptureComponent is not set!" ) );
         return;
     }
 
@@ -160,7 +164,7 @@ bool ALevelStatsCollector::ProcessNextCell()
         return true;
     }
 
-    UE_LOG( LogTemp, Warning, TEXT( "Failed to find ground position for cell at %s" ), *current_cell.Center.ToString() );
+    UE_LOG( LogLevelStatsCollector, Warning, TEXT( "Failed to find ground position for cell at %s" ), *current_cell.Center.ToString() );
     CurrentCellIndex++;
     return ProcessNextCell();
 }
@@ -169,7 +173,7 @@ void ALevelStatsCollector::CaptureCurrentView()
 {
     if ( CaptureComponent == nullptr || CaptureComponent->TextureTarget == nullptr )
     {
-        UE_LOG( LogTemp, Error, TEXT( "Invalid capture component or render target!" ) );
+        UE_LOG( LogLevelStatsCollector, Error, TEXT( "Invalid capture component or render target!" ) );
         return;
     }
 
@@ -181,20 +185,20 @@ void ALevelStatsCollector::CaptureCurrentView()
     FImage image;
     if ( !FImageUtils::GetRenderTargetImage( Cast< UTextureRenderTarget >( CaptureComponent->TextureTarget ), image ) )
     {
-        UE_LOG( LogTemp, Error, TEXT( "Failed to get render target image for cell %d rotation %.0f" ), CurrentCellIndex, CurrentRotation );
+        UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to get render target image for cell %d rotation %.0f" ), CurrentCellIndex, CurrentRotation );
         return;
     }
 
-    const auto screenshot_path = current_path + TEXT( "screenshot.png" );
+    const auto screenshot_path = FString::Printf( TEXT( "%sscreenshot.png" ), *current_path );
     if ( FImageUtils::SaveImageByExtension( *screenshot_path, image ) )
     {
         const auto & current_cell = GridCells[ CurrentCellIndex ];
-        UE_LOG( LogTemp, Log, TEXT( "Image captured at coordinates (%f, %f, %f), saved to: %s" ), current_cell.Center.X, current_cell.Center.Y, current_cell.Center.Z, *screenshot_path );
+        UE_LOG( LogLevelStatsCollector, Log, TEXT( "Image captured at coordinates (%f, %f, %f), saved to: %s" ), current_cell.Center.X, current_cell.Center.Y, current_cell.Center.Z, *screenshot_path );
         TotalCaptureCount++;
     }
     else
     {
-        UE_LOG( LogTemp, Error, TEXT( "Failed to save image: %s" ), *screenshot_path );
+        UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to save image: %s" ), *screenshot_path );
     }
 }
 
@@ -253,7 +257,7 @@ void ALevelStatsCollector::CalculateGridBounds()
         {
             GridBounds.Max = GridBounds.Min + FVector( expected_size_x, expected_size_y, 0.0f );
 
-            UE_LOG( LogTemp, Warning, TEXT( "Grid size adjusted for cell alignment. Original: (%f, %f), Adjusted: (%f, %f)" ), actual_size_x, actual_size_y, expected_size_x, expected_size_y );
+            UE_LOG( LogLevelStatsCollector, Warning, TEXT( "Grid size adjusted for cell alignment. Original: (%f, %f), Adjusted: (%f, %f)" ), actual_size_x, actual_size_y, expected_size_x, expected_size_y );
         }
 
         GridSizeX = expected_size_x;
@@ -270,7 +274,7 @@ void ALevelStatsCollector::CalculateGridBounds()
             FVector( -half_size_x, -half_size_y, 0.0f ),
             FVector( half_size_x, half_size_y, 0.0f ) );
 
-        UE_LOG( LogTemp, Log, TEXT( "Using explicit grid dimensions: %f x %f" ), GridSizeX, GridSizeY );
+        UE_LOG( LogLevelStatsCollector, Log, TEXT( "Using explicit grid dimensions: %f x %f" ), GridSizeX, GridSizeY );
         finalize_bounds();
         return;
     }
@@ -283,7 +287,7 @@ void ALevelStatsCollector::CalculateGridBounds()
             level_bounds = level_bounds_actor->GetComponentsBoundingBox( true );
             if ( level_bounds.IsValid )
             {
-                UE_LOG( LogTemp, Log, TEXT( "Got bounds from LevelBoundsActor: %s" ), *level_bounds.ToString() );
+                UE_LOG( LogLevelStatsCollector, Log, TEXT( "Got bounds from LevelBoundsActor: %s" ), *level_bounds.ToString() );
                 finalize_bounds();
                 return;
             }
@@ -291,7 +295,7 @@ void ALevelStatsCollector::CalculateGridBounds()
     }
 
     // :NOTE: Use default area if no bounds found
-    UE_LOG( LogTemp, Warning, TEXT( "No valid bounds source found, using default 10000x10000 area" ) );
+    UE_LOG( LogLevelStatsCollector, Warning, TEXT( "No valid bounds source found, using default 10000x10000 area" ) );
     level_bounds = FBox( FVector( -5000, -5000, 0 ), FVector( 5000, 5000, 0 ) ); // Arbitrary default area
     finalize_bounds();
 }
@@ -322,7 +326,7 @@ void ALevelStatsCollector::IncrementCellIndex()
 void ALevelStatsCollector::FinishCapture()
 {
     IsCaptureInProgress = false;
-    UE_LOG( LogTemp, Log, TEXT( "Capture process complete! Total captures: %d" ), TotalCaptureCount );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "Capture process complete! Total captures: %d" ), TotalCaptureCount );
 }
 
 void ALevelStatsCollector::StartMetricsCapture()
@@ -358,32 +362,31 @@ void ALevelStatsCollector::FinishMetricsCapture()
 
 FString ALevelStatsCollector::GetBasePath() const
 {
-    const FString base_path = TEXT( "Saved/LevelStatsCollector/" );
-    return FPaths::ProjectDir() + base_path;
+    return FString::Printf( TEXT( "%sSaved/LevelStatsCollector/" ), *FPaths::ProjectDir() );
 }
 
 FString ALevelStatsCollector::GetCurrentCellPath() const
 {
-    return GetBasePath() + FString::Printf( TEXT( "Cell_%d/" ), CurrentCellIndex );
+    return FString::Printf( TEXT( "%sCell_%d/" ), *GetBasePath(), CurrentCellIndex );
 }
 
 FString ALevelStatsCollector::GetCurrentRotationPath() const
 {
-    return GetCurrentCellPath() + FString::Printf( TEXT( "Rotation_%.0f/" ), CurrentRotation );
+    return FString::Printf( TEXT( "%sRotation_%.0f/" ), *GetCurrentCellPath(), CurrentRotation );
 }
 
 void ALevelStatsCollector::LogGridInfo() const
 {
-    UE_LOG( LogTemp, Log, TEXT( "Grid Configuration:" ) );
-    UE_LOG( LogTemp, Log, TEXT( "  Bounds: Min(%s), Max(%s)" ), *GridBounds.Min.ToString(), *GridBounds.Max.ToString() );
-    UE_LOG( LogTemp, Log, TEXT( "  Dimensions: %dx%d cells" ), GridDimensions.X, GridDimensions.Y );
-    UE_LOG( LogTemp, Log, TEXT( "  Cell Size: %f" ), CellSize );
-    UE_LOG( LogTemp, Log, TEXT( "  Total Cells: %d" ), GridCells.Num() );
-    UE_LOG( LogTemp, Log, TEXT( "  Center Offset: %s" ), *GridCenterOffset.ToString() );
-    UE_LOG( LogTemp, Log, TEXT( "Camera Configuration:" ) );
-    UE_LOG( LogTemp, Log, TEXT( "  Height: %f" ), CameraHeight );
-    UE_LOG( LogTemp, Log, TEXT( "  Height Offset: %f" ), CameraHeightOffset );
-    UE_LOG( LogTemp, Log, TEXT( "  Rotation Delta: %f" ), CameraRotationDelta );
-    UE_LOG( LogTemp, Log, TEXT( "Capture Configuration:" ) );
-    UE_LOG( LogTemp, Log, TEXT( "  Capture Delay: %f" ), CaptureDelay );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "Grid Configuration:" ) );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Bounds: Min(%s), Max(%s)" ), *GridBounds.Min.ToString(), *GridBounds.Max.ToString() );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Dimensions: %dx%d cells" ), GridDimensions.X, GridDimensions.Y );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Cell Size: %f" ), CellSize );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Total Cells: %d" ), GridCells.Num() );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Center Offset: %s" ), *GridCenterOffset.ToString() );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "Camera Configuration:" ) );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Height: %f" ), CameraHeight );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Height Offset: %f" ), CameraHeightOffset );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Rotation Delta: %f" ), CameraRotationDelta );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "Capture Configuration:" ) );
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Capture Delay: %f" ), CaptureDelay );
 }
