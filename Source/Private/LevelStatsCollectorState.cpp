@@ -26,7 +26,7 @@ void FIdleState::Enter()
 void FIdleState::Tick( const float delta_time )
 {
     CurrentDelay += delta_time;
-    if ( CurrentDelay >= Collector->MetricsWaitDelay )
+    if ( CurrentDelay >= Collector->Settings.MetricsWaitDelay )
     {
         Collector->TransitionToState( MakeShared< FCapturingMetricsState >( Collector ) );
     }
@@ -53,7 +53,7 @@ void FCapturingMetricsState::Tick( const float delta_time )
 {
     CurrentCaptureTime += delta_time;
 
-    if ( CurrentCaptureTime >= Collector->MetricsDuration )
+    if ( CurrentCaptureTime >= Collector->Settings.MetricsDuration )
     {
         Collector->TransitionToState( MakeShared< FWaitingForSnapshotState >( Collector ) );
     }
@@ -78,7 +78,7 @@ void FWaitingForSnapshotState::Enter()
 void FWaitingForSnapshotState::Tick( const float delta_time )
 {
     CurrentDelay += delta_time;
-    if ( CurrentDelay >= Collector->CaptureDelay )
+    if ( CurrentDelay >= Collector->Settings.CaptureDelay )
     {
         Collector->CaptureCurrentView();
         Collector->TransitionToState( MakeShared< FProcessingNextRotationState >( Collector ) );

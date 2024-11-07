@@ -1,5 +1,7 @@
 ﻿#pragma once
 
+#include "LevelStatsPerformanceReport.h"
+
 #include <ChartCreation.h>
 #include <CoreMinimal.h>
 
@@ -7,6 +9,17 @@
 
 class FLevelStatsCollectorState;
 class FJsonObject;
+
+struct FLevelStatsSettings
+{
+    float CellSize = 10000.0f;
+    float CameraHeight = 10000.0f;
+    float CameraHeightOffset = 250.0f;
+    float CameraRotationDelta = 90.0f;
+    float CaptureDelay = 0.1f;
+    float MetricsDuration = 2.0f;
+    float MetricsWaitDelay = 1.0f;
+};
 
 class FPerformanceMetricsCapture final : public FPerformanceTrackingChart
 {
@@ -40,6 +53,7 @@ public:
     void Tick( float delta_time ) override;
 
     void TransitionToState( const TSharedPtr< FLevelStatsCollectorState > & new_state );
+    const FLevelStatsSettings & GetSettings() const;
 
 private:
     void UpdateRotation();
@@ -56,16 +70,13 @@ private:
     TOptional< FVector > TraceGroundPosition( const FVector & start_location ) const;
     void CalculateGridBounds();
 
-    void InitializeJsonReport();
-    void AddCellToReport();
-    void AddRotationToReport();
-    void FinalizeAndSaveReport() const;
-    void SaveRotationMetrics( const TSharedPtr< FJsonObject > & rotation_object );
+    void AddRotationToReport() const;
 
     FString GetBasePath() const;
     FString GetCurrentCellPath() const;
     FString GetCurrentRotationPath() const;
     FString GetJsonOutputPath() const;
+
     void LogGridInfo() const;
 
     struct FGridCell
@@ -87,11 +98,12 @@ private:
     UPROPERTY()
     USceneCaptureComponent2D * CaptureComponent;
 
+    FLevelStatsPerformanceReport PerformanceReport;
+    FLevelStatsSettings Settings;
+    FString ReportFolderName;
+
     TSharedPtr< FLevelStatsCollectorState > CurrentState;
     TSharedPtr< FPerformanceMetricsCapture > CurrentPerformanceChart;
-
-    TSharedPtr< FJsonObject > CaptureReport;
-    TSharedPtr< FJsonObject > CurrentCellObject;
 
     TArray< FGridCell > GridCells;
     FIntPoint GridDimensions;
@@ -99,15 +111,6 @@ private:
     FBox GridBounds;
     float GridSizeX;
     float GridSizeY;
-    float CellSize;
-
-    float CameraHeight;
-    float CameraHeightOffset;
-    float CameraRotationDelta;
-
-    float CaptureDelay;
-    float MetricsDuration;
-    float MetricsWaitDelay;
 
     int32 TotalCaptureCount;
     int32 CurrentCellIndex;
@@ -126,4 +129,9 @@ FORCEINLINE FPerformanceMetricsCapture::FPerformanceMetricsCapture( const FDateT
 FORCEINLINE TSharedPtr< FJsonObject > FPerformanceMetricsCapture::GetMetricsJson() const
 {
     return MetricsObject;
+}
+
+FORCEINLINE const FLevelStatsSettings & ALevelStatsCollector::GetSettings() const
+{
+    return Settings;
 }
