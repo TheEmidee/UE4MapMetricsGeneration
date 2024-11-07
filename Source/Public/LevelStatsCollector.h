@@ -101,6 +101,6 @@ private:
     float CurrentRotation;
     float CurrentCaptureDelay;
 
-    bool IsCaptureInProgress;
-    bool IsCollectorInitialized;
+    bool bIsCapturing;
+    bool bIsInitialized;
 };
