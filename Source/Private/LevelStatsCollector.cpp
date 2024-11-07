@@ -87,8 +87,8 @@ ALevelStatsCollector::ALevelStatsCollector() :
     CurrentCellIndex( 0 ),
     CurrentRotation( 0.0f ),
     CurrentCaptureDelay( 0.0f ),
-    IsCaptureInProgress( false ),
-    IsCollectorInitialized( false )
+    bIsCapturing( false ),
+    bIsInitialized( false )
 
 {
     PrimaryActorTick.bCanEverTick = true;
@@ -120,7 +120,7 @@ void ALevelStatsCollector::Tick( const float delta_time )
 {
     Super::Tick( delta_time );
 
-    if ( !IsCaptureInProgress || !IsCollectorInitialized )
+    if ( !bIsCapturing || !bIsInitialized )
     {
         return;
     }
@@ -156,7 +156,7 @@ void ALevelStatsCollector::IncrementCellIndex()
 
 void ALevelStatsCollector::FinishCapture()
 {
-    IsCaptureInProgress = false;
+    bIsCapturing = false;
     UE_LOG( LogLevelStatsCollector, Log, TEXT( "Capture process complete! Total captures: %d" ), TotalCaptureCount );
 }
 
@@ -271,8 +271,8 @@ void ALevelStatsCollector::InitializeGrid()
 
     CurrentCellIndex = 0;
     CurrentRotation = 0.0f;
-    IsCaptureInProgress = true;
-    IsCollectorInitialized = true;
+    bIsCapturing = true;
+    bIsInitialized = true;
 
     LogGridInfo();
     ProcessNextCell();

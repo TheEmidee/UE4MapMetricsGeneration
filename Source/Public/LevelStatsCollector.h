@@ -116,8 +116,8 @@ private:
     int32 CurrentCellIndex;
     float CurrentRotation;
     float CurrentCaptureDelay;
-    bool IsCaptureInProgress;
-    bool IsCollectorInitialized;
+    bool bIsCapturing;
+    bool bIsInitialized;
 };
 
 FORCEINLINE FPerformanceMetricsCapture::FPerformanceMetricsCapture( const FDateTime & start_time, const FStringView chart_label ) :
