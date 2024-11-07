@@ -7,16 +7,16 @@ void FLevelStatsPerformanceReport::Initialize( const UWorld * world, const FLeve
     CaptureStartTime = FDateTime::Now();
 
     CaptureReport = MakeShared< FJsonObject >();
-    CaptureReport->SetStringField( "CaptureTime", CaptureStartTime.ToString() );
-    CaptureReport->SetStringField( "MapName", world->GetMapName() );
+    CaptureReport->SetStringField( TEXT( "CaptureTime" ), CaptureStartTime.ToString() );
+    CaptureReport->SetStringField( TEXT( "MapName" ), world->GetMapName() );
 
     const auto settings_object = MakeShared< FJsonObject >();
-    settings_object->SetNumberField( "CellSize", settings.CellSize );
-    settings_object->SetNumberField( "CameraHeight", settings.CameraHeight );
-    settings_object->SetNumberField( "CameraHeightOffset", settings.CameraHeightOffset );
-    settings_object->SetNumberField( "CameraRotationDelta", settings.CameraRotationDelta );
-    settings_object->SetNumberField( "MetricsDuration", settings.MetricsDuration );
-    CaptureReport->SetObjectField( "Settings", settings_object );
+    settings_object->SetNumberField( TEXT( "CellSize" ), settings.CellSize );
+    settings_object->SetNumberField( TEXT( "CameraHeight" ), settings.CameraHeight );
+    settings_object->SetNumberField( TEXT( "CameraHeightOffset" ), settings.CameraHeightOffset );
+    settings_object->SetNumberField( TEXT( "CameraRotationDelta" ), settings.CameraRotationDelta );
+    settings_object->SetNumberField( TEXT( "MetricsDuration" ), settings.MetricsDuration );
+    CaptureReport->SetObjectField( TEXT( "Settings" ), settings_object );
 
     CaptureReport->SetArrayField( TEXT( "Cells" ), TArray< TSharedPtr< FJsonValue > >() );
 }
@@ -25,16 +25,16 @@ void FLevelStatsPerformanceReport::StartNewCell( const int32 cell_index, const F
 {
     CurrentCellObject = MakeShared< FJsonObject >();
 
-    CurrentCellObject->SetNumberField( "Index", cell_index );
+    CurrentCellObject->SetNumberField( TEXT( "Index" ), cell_index );
 
     const auto position_object = MakeShared< FJsonObject >();
-    position_object->SetNumberField( "X", center.X );
-    position_object->SetNumberField( "Y", center.Y );
-    position_object->SetNumberField( "Z", center.Z );
-    position_object->SetNumberField( "GroundHeight", ground_height );
-    CurrentCellObject->SetObjectField( "Position", position_object );
+    position_object->SetNumberField( TEXT( "X" ), center.X );
+    position_object->SetNumberField( TEXT( "Y" ), center.Y );
+    position_object->SetNumberField( TEXT( "Z" ), center.Z );
+    position_object->SetNumberField( TEXT( "GroundHeight" ), ground_height );
+    CurrentCellObject->SetObjectField( TEXT( "Position" ), position_object );
 
-    CurrentCellObject->SetArrayField( "Rotations", TArray< TSharedPtr< FJsonValue > >() );
+    CurrentCellObject->SetArrayField( TEXT( "Rotations" ), TArray< TSharedPtr< FJsonValue > >() );
 }
 
 void FLevelStatsPerformanceReport::AddRotationData(
@@ -42,7 +42,7 @@ void FLevelStatsPerformanceReport::AddRotationData(
     const float rotation,
     const FStringView screenshot_path,
     const TSharedPtr< FJsonObject > & metrics,
-    const FString & output_path ) const
+    const FStringView output_path ) const
 {
     const auto rotation_object = MakeShared< FJsonObject >();
     rotation_object->SetNumberField( TEXT( "Angle" ), rotation );
@@ -67,20 +67,37 @@ void FLevelStatsPerformanceReport::AddRotationData(
         screenshot_path,
         metrics );
 
-    SaveJsonToFile( rotation_report, output_path + TEXT( "metrics.json" ) );
+    SaveJsonToFile( rotation_report, FString::Printf( TEXT( "%smetrics.json" ), *FString( output_path ) ) );
 }
 
-void FLevelStatsPerformanceReport::FinalizeAndSave( const FString & base_path, const int32 total_captures ) const
+void FLevelStatsPerformanceReport::FinishCurrentCell()
+{
+    if ( CurrentCellObject.IsValid() && CaptureReport.IsValid() )
+    {
+        auto cells = CaptureReport->GetArrayField( TEXT( "Cells" ) );
+        cells.Add( MakeShared< FJsonValueObject >( CurrentCellObject ) );
+        CaptureReport->SetArrayField( TEXT( "Cells" ), cells );
+    }
+}
+
+void FLevelStatsPerformanceReport::FinalizeAndSave( const FStringView base_path, const int32 total_captures ) const
 {
     if ( !CaptureReport.IsValid() )
     {
         return;
     }
 
+    if ( CurrentCellObject.IsValid() )
+    {
+        auto cells = CaptureReport->GetArrayField( TEXT( "Cells" ) );
+        cells.Add( MakeShared< FJsonValueObject >( CurrentCellObject ) );
+        CaptureReport->SetArrayField( TEXT( "Cells" ), cells );
+    }
+
     CaptureReport->SetStringField( "CaptureEndTime", FDateTime::Now().ToString() );
     CaptureReport->SetNumberField( "TotalCaptureCount", total_captures );
 
-    SaveJsonToFile( CaptureReport, base_path + TEXT( "capture_report.json" ) );
+    SaveJsonToFile( CaptureReport, FString::Printf( TEXT( "%scapture_report.json" ), *FString( base_path ) ) );
 }
 
 TSharedPtr< FJsonObject > FLevelStatsPerformanceReport::CreateRotationReport(
@@ -116,18 +133,18 @@ TSharedPtr< FJsonObject > FLevelStatsPerformanceReport::CreateRotationReport(
     return rotation_report;
 }
 
-void FLevelStatsPerformanceReport::SaveJsonToFile( const TSharedPtr< FJsonObject > & json_object, const FString & path ) const
+void FLevelStatsPerformanceReport::SaveJsonToFile( const TSharedPtr< FJsonObject > & json_object, const FStringView path ) const
 {
     FString output_string;
     const auto writer = TJsonWriterFactory<>::Create( &output_string );
 
     if ( FJsonSerializer::Serialize( json_object.ToSharedRef(), writer ) &&
-         FFileHelper::SaveStringToFile( output_string, *path ) )
+         FFileHelper::SaveStringToFile( output_string, *FString( path ) ) )
     {
-        UE_LOG( LogLevelStatsCollector, Log, TEXT( "Saved JSON report to: %s" ), *path );
+        UE_LOG( LogLevelStatsCollector, Log, TEXT( "Saved JSON report to: %s" ), *FString( path ) );
     }
     else
     {
-        UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to save JSON report to: %s" ), *path );
+        UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to save JSON report to: %s" ), *FString( path ) );
     }
 }

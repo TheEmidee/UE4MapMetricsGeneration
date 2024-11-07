@@ -15,9 +15,10 @@ public:
         float rotation,
         const FStringView screenshot_path,
         const TSharedPtr< FJsonObject > & metrics,
-        const FString & output_path ) const;
+        const FStringView output_path ) const;
 
-    void FinalizeAndSave( const FString & base_path, int32 total_captures ) const;
+    void FinishCurrentCell();
+    void FinalizeAndSave( const FStringView base_path, int32 total_captures ) const;
 
 private:
     TSharedPtr< FJsonObject > CreateRotationReport(
@@ -30,7 +31,7 @@ private:
         FStringView screenshot_path,
         const TSharedPtr< FJsonObject > & metrics ) const;
 
-    void SaveJsonToFile( const TSharedPtr< FJsonObject > & json_object, const FString & path ) const;
+    void SaveJsonToFile( const TSharedPtr< FJsonObject > & json_object, const FStringView path ) const;
 
     TSharedPtr< FJsonObject > CaptureReport;
     TSharedPtr< FJsonObject > CurrentCellObject;

@@ -168,6 +168,11 @@ bool ALevelStatsCollector::ProcessNextCell()
         return false;
     }
 
+    if ( CurrentCellIndex > 0 )
+    {
+        PerformanceReport.FinishCurrentCell();
+    }
+
     auto & current_cell = GridCells[ CurrentCellIndex ];
     const auto trace_start = current_cell.Center + FVector( 0, 0, Settings.CameraHeight );
 
