@@ -7,7 +7,6 @@
 #include <Dom/JsonObject.h>
 #include <Dom/JsonValue.h>
 #include <Engine/Engine.h>
-#include <Engine/LevelBounds.h>
 #include <Engine/TextureRenderTarget2D.h>
 #include <ImageUtils.h>
 #include <Serialization/JsonSerializer.h>
@@ -82,7 +81,7 @@ void FPerformanceMetricsCapture::CaptureMetrics() const
 }
 
 ALevelStatsCollector::ALevelStatsCollector() :
-    GridCenterOffset( FVector::ZeroVector ),
+    // GridCenterOffset( FVector::ZeroVector ),
     TotalCaptureCount( 0 ),
     CurrentCellIndex( 0 ),
     CurrentRotation( 0.0f ),
@@ -91,6 +90,15 @@ ALevelStatsCollector::ALevelStatsCollector() :
     bIsInitialized( false )
 
 {
+    Settings.CameraHeight = 10000.0f;
+    Settings.CameraHeightOffset = 250.0f;
+    Settings.CameraRotationDelta = 90.0f;
+    Settings.CaptureDelay = 0.1f;
+    Settings.MetricsDuration = 2.0f;
+    Settings.MetricsWaitDelay = 1.0f;
+    Settings.CellSize = 10000.0f;
+    Settings.GridCenterOffset = FVector::ZeroVector;
+
     PrimaryActorTick.bCanEverTick = true;
 
     CaptureComponent = CreateDefaultSubobject< USceneCaptureComponent2D >( TEXT( "CaptureComponent" ) );
@@ -112,8 +120,8 @@ void ALevelStatsCollector::BeginPlay()
 
     IConsoleManager::Get().FindConsoleVariable( TEXT( "t.FPSChart.OpenFolderOnDump" ) )->Set( 0 );
     PerformanceReport.Initialize( GetWorld(), Settings );
-    TransitionToState( MakeShared< FIdleState >( this ) );
     InitializeGrid();
+    TransitionToState( MakeShared< FIdleState >( this ) );
 }
 
 void ALevelStatsCollector::Tick( const float delta_time )
@@ -162,7 +170,7 @@ void ALevelStatsCollector::FinishCapture()
 
 bool ALevelStatsCollector::ProcessNextCell()
 {
-    if ( !GridCells.IsValidIndex( CurrentCellIndex ) )
+    if ( !GridConfig.IsValidCellIndex( CurrentCellIndex ) )
     {
         PerformanceReport.FinalizeAndSave( GetBasePath(), TotalCaptureCount );
         return false;
@@ -173,7 +181,7 @@ bool ALevelStatsCollector::ProcessNextCell()
         PerformanceReport.FinishCurrentCell();
     }
 
-    auto & current_cell = GridCells[ CurrentCellIndex ];
+    auto & current_cell = GridConfig.GridCells[ CurrentCellIndex ];
     const auto trace_start = current_cell.Center + FVector( 0, 0, Settings.CameraHeight );
 
     if ( const auto hit_location = TraceGroundPosition( trace_start ) )
@@ -215,7 +223,7 @@ void ALevelStatsCollector::CaptureCurrentView()
     const auto screenshot_path = FString::Printf( TEXT( "%sscreenshot.png" ), *current_path );
     if ( FImageUtils::SaveImageByExtension( *screenshot_path, image ) )
     {
-        const auto & current_cell = GridCells[ CurrentCellIndex ];
+        const auto & current_cell = GridConfig.GridCells[ CurrentCellIndex ];
         UE_LOG( LogLevelStatsCollector,
             Log,
             TEXT( "Image captured at coordinates (%f, %f, %f), saved to: %s" ),
@@ -259,27 +267,16 @@ void ALevelStatsCollector::FinishMetricsCapture()
 
 void ALevelStatsCollector::InitializeGrid()
 {
-    CalculateGridBounds();
-
-    const auto total_cells = GridDimensions.X * GridDimensions.Y;
-    GridCells.Empty( total_cells );
-
-    for ( auto y = 0; y < GridDimensions.Y; ++y )
-    {
-        for ( auto x = 0; x < GridDimensions.X; ++x )
-        {
-            GridCells.Emplace( GridBounds.Min + FVector( x * Settings.CellSize + Settings.CellSize / 2,
-                                                    y * Settings.CellSize + Settings.CellSize / 2,
-                                                    0.0f ) );
-        }
-    }
+    GridConfig.Initialize( Settings.GridCenterOffset, Settings.CellSize );
+    GridConfig.CalculateBounds( GetWorld() );
+    GridConfig.GenerateCells();
 
     CurrentCellIndex = 0;
     CurrentRotation = 0.0f;
     bIsCapturing = true;
     bIsInitialized = true;
 
-    LogGridInfo();
+    GridConfig.LogGridInfo();
     ProcessNextCell();
 }
 
@@ -318,93 +315,93 @@ TOptional< FVector > ALevelStatsCollector::TraceGroundPosition( const FVector & 
     return TOptional< FVector >();
 }
 
-void ALevelStatsCollector::CalculateGridBounds()
-{
-    FBox level_bounds( ForceInit );
-
-    const auto finalize_bounds = [ & ] {
-        // :NOTE: Add padding to ensure we capture the edges properly
-        const auto bounds_padding = Settings.CellSize * 0.5f;
-        level_bounds = level_bounds.ExpandBy( FVector( bounds_padding, bounds_padding, 0 ) );
-
-        const auto origin = level_bounds.GetCenter();
-        const auto extent = level_bounds.GetExtent();
-
-        GridBounds.Min = FVector(
-                             FMath::FloorToFloat( origin.X - extent.X ) / Settings.CellSize * Settings.CellSize,
-                             FMath::FloorToFloat( origin.Y - extent.Y ) / Settings.CellSize * Settings.CellSize,
-                             0 ) +
-                         GridCenterOffset;
-
-        GridBounds.Max = FVector(
-                             FMath::CeilToFloat( origin.X + extent.X ) / Settings.CellSize * Settings.CellSize,
-                             FMath::CeilToFloat( origin.Y + extent.Y ) / Settings.CellSize * Settings.CellSize,
-                             0 ) +
-                         GridCenterOffset;
-
-        const auto grid_size = GridBounds.Max - GridBounds.Min;
-        GridDimensions = FIntPoint(
-            FMath::CeilToInt( grid_size.X / Settings.CellSize ),
-            FMath::CeilToInt( grid_size.Y / Settings.CellSize ) );
-
-        const auto expected_size_x = GridDimensions.X * Settings.CellSize;
-        const auto expected_size_y = GridDimensions.Y * Settings.CellSize;
-        const auto actual_size_x = grid_size.X;
-        const auto actual_size_y = grid_size.Y;
-
-        if ( !FMath::IsNearlyEqual( expected_size_x, actual_size_x, KINDA_SMALL_NUMBER ) ||
-             !FMath::IsNearlyEqual( expected_size_y, actual_size_y, KINDA_SMALL_NUMBER ) )
-        {
-            GridBounds.Max = GridBounds.Min + FVector( expected_size_x, expected_size_y, 0.0f );
-
-            UE_LOG( LogLevelStatsCollector,
-                Warning,
-                TEXT( "Grid size adjusted for cell alignment. Original: (%f, %f), Adjusted: (%f, %f)" ),
-                actual_size_x,
-                actual_size_y,
-                expected_size_x,
-                expected_size_y );
-        }
-
-        GridSizeX = expected_size_x;
-        GridSizeY = expected_size_y;
-    };
-
-    // :NOTE: Use explicit grid dimensions if provided
-    if ( GridSizeX > 0.0f && GridSizeY > 0.0f )
-    {
-        const auto half_size_x = GridSizeX * 0.5f;
-        const auto half_size_y = GridSizeY * 0.5f;
-
-        level_bounds = FBox(
-            FVector( -half_size_x, -half_size_y, 0.0f ),
-            FVector( half_size_x, half_size_y, 0.0f ) );
-
-        UE_LOG( LogLevelStatsCollector, Log, TEXT( "Using explicit grid dimensions: %f x %f" ), GridSizeX, GridSizeY );
-        finalize_bounds();
-        return;
-    }
-
-    // :NOTE: Use LevelBoundsActor if no explicit dimensions provided
-    if ( const auto * current_level = GetWorld()->GetCurrentLevel() )
-    {
-        if ( const auto * level_bounds_actor = current_level->LevelBoundsActor.Get() )
-        {
-            level_bounds = level_bounds_actor->GetComponentsBoundingBox( true );
-            if ( level_bounds.IsValid )
-            {
-                UE_LOG( LogLevelStatsCollector, Log, TEXT( "Got bounds from LevelBoundsActor: %s" ), *level_bounds.ToString() );
-                finalize_bounds();
-                return;
-            }
-        }
-    }
-
-    // :NOTE: Use default area if no bounds found
-    UE_LOG( LogLevelStatsCollector, Warning, TEXT( "No valid bounds source found, using default 10000x10000 area" ) );
-    level_bounds = FBox( FVector( -5000, -5000, 0 ), FVector( 5000, 5000, 0 ) );
-    finalize_bounds();
-}
+// void ALevelStatsCollector::CalculateGridBounds()
+// {
+//     FBox level_bounds( ForceInit );
+//
+//     const auto finalize_bounds = [ & ] {
+//         // :NOTE: Add padding to ensure we capture the edges properly
+//         const auto bounds_padding = Settings.CellSize * 0.5f;
+//         level_bounds = level_bounds.ExpandBy( FVector( bounds_padding, bounds_padding, 0 ) );
+//
+//         const auto origin = level_bounds.GetCenter();
+//         const auto extent = level_bounds.GetExtent();
+//
+//         GridBounds.Min = FVector(
+//                              FMath::FloorToFloat( origin.X - extent.X ) / Settings.CellSize * Settings.CellSize,
+//                              FMath::FloorToFloat( origin.Y - extent.Y ) / Settings.CellSize * Settings.CellSize,
+//                              0 ) +
+//                          GridCenterOffset;
+//
+//         GridBounds.Max = FVector(
+//                              FMath::CeilToFloat( origin.X + extent.X ) / Settings.CellSize * Settings.CellSize,
+//                              FMath::CeilToFloat( origin.Y + extent.Y ) / Settings.CellSize * Settings.CellSize,
+//                              0 ) +
+//                          GridCenterOffset;
+//
+//         const auto grid_size = GridBounds.Max - GridBounds.Min;
+//         GridDimensions = FIntPoint(
+//             FMath::CeilToInt( grid_size.X / Settings.CellSize ),
+//             FMath::CeilToInt( grid_size.Y / Settings.CellSize ) );
+//
+//         const auto expected_size_x = GridDimensions.X * Settings.CellSize;
+//         const auto expected_size_y = GridDimensions.Y * Settings.CellSize;
+//         const auto actual_size_x = grid_size.X;
+//         const auto actual_size_y = grid_size.Y;
+//
+//         if ( !FMath::IsNearlyEqual( expected_size_x, actual_size_x, KINDA_SMALL_NUMBER ) ||
+//              !FMath::IsNearlyEqual( expected_size_y, actual_size_y, KINDA_SMALL_NUMBER ) )
+//         {
+//             GridBounds.Max = GridBounds.Min + FVector( expected_size_x, expected_size_y, 0.0f );
+//
+//             UE_LOG( LogLevelStatsCollector,
+//                 Warning,
+//                 TEXT( "Grid size adjusted for cell alignment. Original: (%f, %f), Adjusted: (%f, %f)" ),
+//                 actual_size_x,
+//                 actual_size_y,
+//                 expected_size_x,
+//                 expected_size_y );
+//         }
+//
+//         GridSizeX = expected_size_x;
+//         GridSizeY = expected_size_y;
+//     };
+//
+//     // :NOTE: Use explicit grid dimensions if provided
+//     if ( GridSizeX > 0.0f && GridSizeY > 0.0f )
+//     {
+//         const auto half_size_x = GridSizeX * 0.5f;
+//         const auto half_size_y = GridSizeY * 0.5f;
+//
+//         level_bounds = FBox(
+//             FVector( -half_size_x, -half_size_y, 0.0f ),
+//             FVector( half_size_x, half_size_y, 0.0f ) );
+//
+//         UE_LOG( LogLevelStatsCollector, Log, TEXT( "Using explicit grid dimensions: %f x %f" ), GridSizeX, GridSizeY );
+//         finalize_bounds();
+//         return;
+//     }
+//
+//     // :NOTE: Use LevelBoundsActor if no explicit dimensions provided
+//     if ( const auto * current_level = GetWorld()->GetCurrentLevel() )
+//     {
+//         if ( const auto * level_bounds_actor = current_level->LevelBoundsActor.Get() )
+//         {
+//             level_bounds = level_bounds_actor->GetComponentsBoundingBox( true );
+//             if ( level_bounds.IsValid )
+//             {
+//                 UE_LOG( LogLevelStatsCollector, Log, TEXT( "Got bounds from LevelBoundsActor: %s" ), *level_bounds.ToString() );
+//                 finalize_bounds();
+//                 return;
+//             }
+//         }
+//     }
+//
+//     // :NOTE: Use default area if no bounds found
+//     UE_LOG( LogLevelStatsCollector, Warning, TEXT( "No valid bounds source found, using default 10000x10000 area" ) );
+//     level_bounds = FBox( FVector( -5000, -5000, 0 ), FVector( 5000, 5000, 0 ) );
+//     finalize_bounds();
+// }
 
 void ALevelStatsCollector::AddRotationToReport() const
 {
@@ -448,21 +445,21 @@ FString ALevelStatsCollector::GetJsonOutputPath() const
     return GetBasePath() + TEXT( "capture_report.json" );
 }
 
-void ALevelStatsCollector::LogGridInfo() const
-{
-    UE_LOG( LogLevelStatsCollector, Log, TEXT( "Grid Configuration:" ) );
-    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Bounds: Min(%s), Max(%s)" ), *GridBounds.Min.ToString(), *GridBounds.Max.ToString() );
-    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Dimensions: %dx%d cells" ), GridDimensions.X, GridDimensions.Y );
-    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Cell Size: %f" ), Settings.CellSize );
-    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Total Cells: %d" ), GridCells.Num() );
-    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Center Offset: %s" ), *GridCenterOffset.ToString() );
-    UE_LOG( LogLevelStatsCollector, Log, TEXT( "Camera Configuration:" ) );
-    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Height: %f" ), Settings.CameraHeight );
-    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Height Offset: %f" ), Settings.CameraHeightOffset );
-    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Rotation Delta: %f" ), Settings.CameraRotationDelta );
-    UE_LOG( LogLevelStatsCollector, Log, TEXT( "Capture Configuration:" ) );
-    UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Capture Delay: %f" ), Settings.CaptureDelay );
-}
+// void ALevelStatsCollector::LogGridInfo() const
+// {
+//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "Grid Configuration:" ) );
+//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Bounds: Min(%s), Max(%s)" ), *GridBounds.Min.ToString(), *GridBounds.Max.ToString() );
+//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Dimensions: %dx%d cells" ), GridDimensions.X, GridDimensions.Y );
+//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Cell Size: %f" ), Settings.CellSize );
+//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Total Cells: %d" ), GridCells.Num() );
+//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Center Offset: %s" ), *GridCenterOffset.ToString() );
+//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "Camera Configuration:" ) );
+//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Height: %f" ), Settings.CameraHeight );
+//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Height Offset: %f" ), Settings.CameraHeightOffset );
+//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Rotation Delta: %f" ), Settings.CameraRotationDelta );
+//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "Capture Configuration:" ) );
+//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Capture Delay: %f" ), Settings.CaptureDelay );
+// }
 
 // :NOTE: This is just an example of several metrics that can be captured -- To be deleted in the future
 /*

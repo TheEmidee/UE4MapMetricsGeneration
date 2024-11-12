@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include "LevelStatsGridConfiguration.h"
 #include "LevelStatsPerformanceReport.h"
 
 #include <ChartCreation.h>
@@ -12,13 +13,14 @@ class FJsonObject;
 
 struct FLevelStatsSettings
 {
-    float CellSize = 10000.0f;
-    float CameraHeight = 10000.0f;
-    float CameraHeightOffset = 250.0f;
-    float CameraRotationDelta = 90.0f;
-    float CaptureDelay = 0.1f;
-    float MetricsDuration = 2.0f;
-    float MetricsWaitDelay = 1.0f;
+    float CameraHeight;
+    float CameraHeightOffset;
+    float CameraRotationDelta;
+    float CaptureDelay;
+    float MetricsDuration;
+    float MetricsWaitDelay;
+    float CellSize;
+    FVector GridCenterOffset;
 };
 
 class FPerformanceMetricsCapture final : public FPerformanceTrackingChart
@@ -68,7 +70,6 @@ private:
     void InitializeGrid();
     void SetupSceneCapture() const;
     TOptional< FVector > TraceGroundPosition( const FVector & start_location ) const;
-    void CalculateGridBounds();
 
     void AddRotationToReport() const;
 
@@ -77,40 +78,16 @@ private:
     FString GetCurrentRotationPath() const;
     FString GetJsonOutputPath() const;
 
-    void LogGridInfo() const;
-
-    struct FGridCell
-    {
-        explicit FGridCell( const FVector & center ) :
-            Center( center ),
-            GroundHeight( 0.0f )
-        {}
-
-        FGridCell() :
-            Center( FVector::ZeroVector ),
-            GroundHeight( 0.0f )
-        {}
-
-        FVector Center;
-        float GroundHeight;
-    };
-
     UPROPERTY()
     USceneCaptureComponent2D * CaptureComponent;
 
     FLevelStatsPerformanceReport PerformanceReport;
+    FLevelStatsGridConfiguration GridConfig;
     FLevelStatsSettings Settings;
     FString ReportFolderName;
 
     TSharedPtr< FLevelStatsCollectorState > CurrentState;
     TSharedPtr< FPerformanceMetricsCapture > CurrentPerformanceChart;
-
-    TArray< FGridCell > GridCells;
-    FIntPoint GridDimensions;
-    FVector GridCenterOffset;
-    FBox GridBounds;
-    float GridSizeX;
-    float GridSizeY;
 
     int32 TotalCaptureCount;
     int32 CurrentCellIndex;
