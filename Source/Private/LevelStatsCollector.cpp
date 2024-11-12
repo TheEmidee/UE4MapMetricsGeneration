@@ -8,7 +8,6 @@
 #include <Dom/JsonValue.h>
 #include <Engine/Engine.h>
 #include <Engine/TextureRenderTarget2D.h>
-#include <ImageUtils.h>
 #include <Serialization/JsonSerializer.h>
 #include <Serialization/JsonWriter.h>
 
@@ -81,7 +80,6 @@ void FPerformanceMetricsCapture::CaptureMetrics() const
 }
 
 ALevelStatsCollector::ALevelStatsCollector() :
-    // GridCenterOffset( FVector::ZeroVector ),
     TotalCaptureCount( 0 ),
     CurrentCellIndex( 0 ),
     CurrentRotation( 0.0f ),
@@ -150,24 +148,6 @@ void ALevelStatsCollector::TransitionToState( const TSharedPtr< FLevelStatsColle
     CurrentState->Enter();
 }
 
-void ALevelStatsCollector::UpdateRotation()
-{
-    CurrentRotation += Settings.CameraRotationDelta;
-    CaptureComponent->SetRelativeRotation( FRotator( 0.0f, CurrentRotation, 0.0f ) );
-}
-
-void ALevelStatsCollector::IncrementCellIndex()
-{
-    CurrentCellIndex++;
-    CurrentRotation = 0.0f;
-}
-
-void ALevelStatsCollector::FinishCapture()
-{
-    bIsCapturing = false;
-    UE_LOG( LogLevelStatsCollector, Log, TEXT( "Capture process complete! Total captures: %d" ), TotalCaptureCount );
-}
-
 bool ALevelStatsCollector::ProcessNextCell()
 {
     if ( !GridConfig.IsValidCellIndex( CurrentCellIndex ) )
@@ -198,71 +178,6 @@ bool ALevelStatsCollector::ProcessNextCell()
     UE_LOG( LogLevelStatsCollector, Warning, TEXT( "Failed to find ground position for cell at %s" ), *current_cell.Center.ToString() );
     CurrentCellIndex++;
     return ProcessNextCell();
-}
-
-void ALevelStatsCollector::CaptureCurrentView()
-{
-    if ( CaptureComponent == nullptr || CaptureComponent->TextureTarget == nullptr )
-    {
-        UE_LOG( LogLevelStatsCollector, Error, TEXT( "Invalid capture component or render target!" ) );
-        return;
-    }
-
-    const auto current_path = GetCurrentRotationPath();
-    IFileManager::Get().MakeDirectory( *current_path, true );
-
-    CaptureComponent->CaptureScene();
-
-    FImage image;
-    if ( !FImageUtils::GetRenderTargetImage( Cast< UTextureRenderTarget >( CaptureComponent->TextureTarget ), image ) )
-    {
-        UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to get render target image for cell %d rotation %.0f" ), CurrentCellIndex, CurrentRotation );
-        return;
-    }
-
-    const auto screenshot_path = FString::Printf( TEXT( "%sscreenshot.png" ), *current_path );
-    if ( FImageUtils::SaveImageByExtension( *screenshot_path, image ) )
-    {
-        const auto & current_cell = GridConfig.GridCells[ CurrentCellIndex ];
-        UE_LOG( LogLevelStatsCollector,
-            Log,
-            TEXT( "Image captured at coordinates (%f, %f, %f), saved to: %s" ),
-            current_cell.Center.X,
-            current_cell.Center.Y,
-            current_cell.Center.Z,
-            *screenshot_path );
-
-        TotalCaptureCount++;
-    }
-    else
-    {
-        UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to save image: %s" ), *screenshot_path );
-    }
-}
-
-void ALevelStatsCollector::StartMetricsCapture()
-{
-    const auto label = FString::Printf( TEXT( "Cell_%d_Rot_%.0f" ), CurrentCellIndex, CurrentRotation );
-
-    if ( CurrentPerformanceChart.IsValid() )
-    {
-        GEngine->RemovePerformanceDataConsumer( CurrentPerformanceChart );
-        CurrentPerformanceChart.Reset();
-    }
-
-    CurrentPerformanceChart = MakeShareable( new FPerformanceMetricsCapture( FDateTime::Now(), label ) );
-
-    GEngine->AddPerformanceDataConsumer( CurrentPerformanceChart );
-}
-
-void ALevelStatsCollector::FinishMetricsCapture()
-{
-    if ( CurrentPerformanceChart.IsValid() )
-    {
-        AddRotationToReport();
-        GEngine->RemovePerformanceDataConsumer( CurrentPerformanceChart );
-        CurrentPerformanceChart.Reset();
-    }
 }
 
 void ALevelStatsCollector::InitializeGrid()
@@ -313,116 +228,6 @@ TOptional< FVector > ALevelStatsCollector::TraceGroundPosition( const FVector & 
     }
 
     return TOptional< FVector >();
-}
-
-// void ALevelStatsCollector::CalculateGridBounds()
-// {
-//     FBox level_bounds( ForceInit );
-//
-//     const auto finalize_bounds = [ & ] {
-//         // :NOTE: Add padding to ensure we capture the edges properly
-//         const auto bounds_padding = Settings.CellSize * 0.5f;
-//         level_bounds = level_bounds.ExpandBy( FVector( bounds_padding, bounds_padding, 0 ) );
-//
-//         const auto origin = level_bounds.GetCenter();
-//         const auto extent = level_bounds.GetExtent();
-//
-//         GridBounds.Min = FVector(
-//                              FMath::FloorToFloat( origin.X - extent.X ) / Settings.CellSize * Settings.CellSize,
-//                              FMath::FloorToFloat( origin.Y - extent.Y ) / Settings.CellSize * Settings.CellSize,
-//                              0 ) +
-//                          GridCenterOffset;
-//
-//         GridBounds.Max = FVector(
-//                              FMath::CeilToFloat( origin.X + extent.X ) / Settings.CellSize * Settings.CellSize,
-//                              FMath::CeilToFloat( origin.Y + extent.Y ) / Settings.CellSize * Settings.CellSize,
-//                              0 ) +
-//                          GridCenterOffset;
-//
-//         const auto grid_size = GridBounds.Max - GridBounds.Min;
-//         GridDimensions = FIntPoint(
-//             FMath::CeilToInt( grid_size.X / Settings.CellSize ),
-//             FMath::CeilToInt( grid_size.Y / Settings.CellSize ) );
-//
-//         const auto expected_size_x = GridDimensions.X * Settings.CellSize;
-//         const auto expected_size_y = GridDimensions.Y * Settings.CellSize;
-//         const auto actual_size_x = grid_size.X;
-//         const auto actual_size_y = grid_size.Y;
-//
-//         if ( !FMath::IsNearlyEqual( expected_size_x, actual_size_x, KINDA_SMALL_NUMBER ) ||
-//              !FMath::IsNearlyEqual( expected_size_y, actual_size_y, KINDA_SMALL_NUMBER ) )
-//         {
-//             GridBounds.Max = GridBounds.Min + FVector( expected_size_x, expected_size_y, 0.0f );
-//
-//             UE_LOG( LogLevelStatsCollector,
-//                 Warning,
-//                 TEXT( "Grid size adjusted for cell alignment. Original: (%f, %f), Adjusted: (%f, %f)" ),
-//                 actual_size_x,
-//                 actual_size_y,
-//                 expected_size_x,
-//                 expected_size_y );
-//         }
-//
-//         GridSizeX = expected_size_x;
-//         GridSizeY = expected_size_y;
-//     };
-//
-//     // :NOTE: Use explicit grid dimensions if provided
-//     if ( GridSizeX > 0.0f && GridSizeY > 0.0f )
-//     {
-//         const auto half_size_x = GridSizeX * 0.5f;
-//         const auto half_size_y = GridSizeY * 0.5f;
-//
-//         level_bounds = FBox(
-//             FVector( -half_size_x, -half_size_y, 0.0f ),
-//             FVector( half_size_x, half_size_y, 0.0f ) );
-//
-//         UE_LOG( LogLevelStatsCollector, Log, TEXT( "Using explicit grid dimensions: %f x %f" ), GridSizeX, GridSizeY );
-//         finalize_bounds();
-//         return;
-//     }
-//
-//     // :NOTE: Use LevelBoundsActor if no explicit dimensions provided
-//     if ( const auto * current_level = GetWorld()->GetCurrentLevel() )
-//     {
-//         if ( const auto * level_bounds_actor = current_level->LevelBoundsActor.Get() )
-//         {
-//             level_bounds = level_bounds_actor->GetComponentsBoundingBox( true );
-//             if ( level_bounds.IsValid )
-//             {
-//                 UE_LOG( LogLevelStatsCollector, Log, TEXT( "Got bounds from LevelBoundsActor: %s" ), *level_bounds.ToString() );
-//                 finalize_bounds();
-//                 return;
-//             }
-//         }
-//     }
-//
-//     // :NOTE: Use default area if no bounds found
-//     UE_LOG( LogLevelStatsCollector, Warning, TEXT( "No valid bounds source found, using default 10000x10000 area" ) );
-//     level_bounds = FBox( FVector( -5000, -5000, 0 ), FVector( 5000, 5000, 0 ) );
-//     finalize_bounds();
-// }
-
-void ALevelStatsCollector::AddRotationToReport() const
-{
-    if ( !CurrentPerformanceChart.IsValid() )
-    {
-        UE_LOG( LogLevelStatsCollector, Warning, TEXT( "AddRotationToReport: Invalid performance chart" ) );
-        return;
-    }
-
-    CurrentPerformanceChart->CaptureMetrics();
-
-    const auto screenshot_path = FString::Printf( TEXT( "Cell_%d/Rotation_%.0f/screenshot.png" ),
-        CurrentCellIndex,
-        CurrentRotation );
-
-    PerformanceReport.AddRotationData(
-        CurrentCellIndex,
-        CurrentRotation,
-        screenshot_path,
-        CurrentPerformanceChart->GetMetricsJson(),
-        GetCurrentRotationPath() );
 }
 
 FString ALevelStatsCollector::GetBasePath() const

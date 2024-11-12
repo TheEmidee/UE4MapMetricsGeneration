@@ -58,20 +58,10 @@ public:
     const FLevelStatsSettings & GetSettings() const;
 
 private:
-    void UpdateRotation();
-    void IncrementCellIndex();
-    void FinishCapture();
-
-    void StartMetricsCapture();
-    void FinishMetricsCapture();
-    void CaptureCurrentView();
     bool ProcessNextCell();
-
     void InitializeGrid();
     void SetupSceneCapture() const;
     TOptional< FVector > TraceGroundPosition( const FVector & start_location ) const;
-
-    void AddRotationToReport() const;
 
     FString GetBasePath() const;
     FString GetCurrentCellPath() const;
@@ -87,7 +77,6 @@ private:
     FString ReportFolderName;
 
     TSharedPtr< FLevelStatsCollectorState > CurrentState;
-    TSharedPtr< FPerformanceMetricsCapture > CurrentPerformanceChart;
 
     int32 TotalCaptureCount;
     int32 CurrentCellIndex;
