@@ -3,7 +3,7 @@
 #include "LevelStatsCollector.h"
 
 #include <Components/SceneCaptureComponent2D.h>
-#include <Engine/TextureRenderTarget.h>
+#include <Engine/TextureRenderTarget2D.h>
 #include <ImageUtils.h>
 
 FLevelStatsCollectorState::FLevelStatsCollectorState( ALevelStatsCollector * collector ) :
@@ -68,42 +68,68 @@ void FWaitingForSnapshotState::Tick( const float delta_time )
 
         const auto current_path = Collector->GetCurrentRotationPath();
         IFileManager::Get().MakeDirectory( *current_path, true );
+        const auto screenshot_path = FString::Printf( TEXT( "%sscreenshot.png" ), *current_path );
 
         CaptureComponent->CaptureScene();
+        TWeakObjectPtr< ALevelStatsCollector > weak_collector( Collector );
+        const auto cell_index = CurrentCellIndex;
+        const auto rotation = Collector->CurrentRotation;
+        Collector->bIsCapturing = false;
 
-        FImage image;
-        if ( !FImageUtils::GetRenderTargetImage( Cast< UTextureRenderTarget >( CaptureComponent->TextureTarget ), image ) )
-        {
-            UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to get render target image for cell %d rotation %.0f" ), CurrentCellIndex, Collector->CurrentRotation );
-            return;
-        }
+        CaptureAndSaveAsync( CaptureComponent->TextureTarget, screenshot_path )
+            .Next( [ weak_collector, cell_index, rotation, screenshot_path ]( bool bSuccess ) {
+                AsyncTask( ENamedThreads::GameThread, [ weak_collector, cell_index, rotation, screenshot_path, bSuccess ]() {
+                    if ( !weak_collector.IsValid() )
+                    {
+                        return;
+                    }
 
-        const auto screenshot_path = FString::Printf( TEXT( "%sscreenshot.png" ), *current_path );
-        if ( FImageUtils::SaveImageByExtension( *screenshot_path, image ) )
-        {
-            const auto & current_cell = Collector->GridConfig.GridCells[ CurrentCellIndex ];
-            UE_LOG( LogLevelStatsCollector,
-                Log,
-                TEXT( "Image captured at coordinates (%f, %f, %f), saved to: %s" ),
-                current_cell.Center.X,
-                current_cell.Center.Y,
-                current_cell.Center.Z,
-                *screenshot_path );
+                    ALevelStatsCollector * safe_collector = weak_collector.Get();
 
-            Collector->TotalCaptureCount++;
-        }
-        else
-        {
-            UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to save image: %s" ), *screenshot_path );
-        }
+                    if ( bSuccess )
+                    {
+                        const auto & current_cell = safe_collector->GridConfig.GridCells[ cell_index ];
+                        UE_LOG( LogLevelStatsCollector,
+                            Log,
+                            TEXT( "Image captured at coordinates (%f, %f, %f), saved to: %s" ),
+                            current_cell.Center.X,
+                            current_cell.Center.Y,
+                            current_cell.Center.Z,
+                            *screenshot_path );
 
-        Collector->TransitionToState( MakeShared< FProcessingNextRotationState >( Collector ) );
+                        safe_collector->TotalCaptureCount++;
+                        safe_collector->CurrentRotation = rotation;
+                        safe_collector->CurrentCellIndex = cell_index;
+                        safe_collector->bIsCapturing = true;
+
+                        safe_collector->TransitionToState( MakeShared< FProcessingNextRotationState >( safe_collector ) );
+                    }
+                    else
+                    {
+                        UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to save image: %s" ), *screenshot_path );
+                        safe_collector->bIsCapturing = true;
+                    }
+                } );
+            } );
     }
 }
 
 void FWaitingForSnapshotState::Exit()
 {
     CurrentDelay = 0.0f;
+}
+
+TFuture< bool > FWaitingForSnapshotState::CaptureAndSaveAsync( UTextureRenderTarget2D * render_target, const FString & output_path )
+{
+    FImage image;
+    if ( !FImageUtils::GetRenderTargetImage( render_target, image ) )
+    {
+        return MakeFulfilledPromise< bool >( false ).GetFuture();
+    }
+
+    return Async( EAsyncExecution::ThreadPool, [ image = MoveTemp( image ), output_path ] {
+        return FImageUtils::SaveImageByExtension( *output_path, image );
+    } );
 }
 
 // :NOTE: FProcessingNextRotationState Implementation

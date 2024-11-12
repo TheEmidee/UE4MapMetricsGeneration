@@ -40,6 +40,7 @@ public:
     void Enter() override;
     void Tick( float delta_time ) override;
     void Exit() override;
+    static TFuture< bool > CaptureAndSaveAsync( UTextureRenderTarget2D * render_target, const FString & output_path );
 
 private:
     float CurrentDelay;
