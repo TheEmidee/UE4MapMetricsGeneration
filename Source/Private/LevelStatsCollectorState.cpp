@@ -66,9 +66,9 @@ void FWaitingForSnapshotState::Tick( const float delta_time )
             return;
         }
 
-        const auto current_path = Collector->GetCurrentRotationPath();
-        IFileManager::Get().MakeDirectory( *current_path, true );
-        const auto screenshot_path = FString::Printf( TEXT( "%sscreenshot.png" ), *current_path );
+        const auto base_path = Collector->GetBasePath();
+        IFileManager::Get().MakeDirectory( *base_path, true );
+        const auto screenshot_path = Collector->GetScreenshotPath();
 
         CaptureComponent->CaptureScene();
         TWeakObjectPtr< ALevelStatsCollector > weak_collector( Collector );
@@ -78,7 +78,7 @@ void FWaitingForSnapshotState::Tick( const float delta_time )
 
         CaptureAndSaveAsync( CaptureComponent->TextureTarget, screenshot_path )
             .Next( [ weak_collector, cell_index, rotation, screenshot_path ]( bool bSuccess ) {
-                AsyncTask( ENamedThreads::GameThread, [ weak_collector, cell_index, rotation, screenshot_path, bSuccess ]() {
+                AsyncTask( ENamedThreads::GameThread, [ weak_collector, cell_index, rotation, screenshot_path, bSuccess ] {
                     if ( !weak_collector.IsValid() )
                     {
                         return;
@@ -231,16 +231,14 @@ void FCapturingMetricsState::Exit()
 
     CurrentPerformanceChart->CaptureMetrics();
 
-    const auto screenshot_path = FString::Printf( TEXT( "Cell_%d/Rotation_%.0f/screenshot.png" ),
+    const auto screenshot_path = FString::Printf( TEXT( "screenshot_cell%d_rotation_%.0f.png" ),
         CurrentCellIndex,
         CurrentRotation );
 
     Collector->PerformanceReport.AddRotationData(
-        CurrentCellIndex,
         CurrentRotation,
         screenshot_path,
-        CurrentPerformanceChart->GetMetricsJson(),
-        Collector->GetCurrentRotationPath() );
+        CurrentPerformanceChart->GetMetricsJson() );
 
     GEngine->RemovePerformanceDataConsumer( CurrentPerformanceChart );
     CurrentPerformanceChart.Reset();

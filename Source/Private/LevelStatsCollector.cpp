@@ -5,11 +5,8 @@
 
 #include <Components/SceneCaptureComponent2D.h>
 #include <Dom/JsonObject.h>
-#include <Dom/JsonValue.h>
 #include <Engine/Engine.h>
 #include <Engine/TextureRenderTarget2D.h>
-#include <Serialization/JsonSerializer.h>
-#include <Serialization/JsonWriter.h>
 
 DEFINE_LOG_CATEGORY( LogLevelStatsCollector );
 
@@ -168,10 +165,11 @@ bool ALevelStatsCollector::ProcessNextCell()
     {
         current_cell.GroundHeight = hit_location.GetValue().Z;
         const auto camera_location = hit_location.GetValue() + FVector( 0, 0, Settings.CameraHeightOffset );
+        current_cell.CameraHeight = camera_location.Z;
         SetActorLocation( camera_location );
         CurrentRotation = 0.0f;
         CaptureComponent->SetRelativeRotation( FRotator::ZeroRotator );
-        PerformanceReport.StartNewCell( CurrentCellIndex, current_cell.Center, current_cell.GroundHeight );
+        PerformanceReport.StartNewCell( CurrentCellIndex, current_cell.Center, current_cell.GroundHeight, current_cell.CameraHeight );
         return true;
     }
 
@@ -235,14 +233,9 @@ FString ALevelStatsCollector::GetBasePath() const
     return FString::Printf( TEXT( "%sSaved/LevelStatsCollector/%s/" ), *FPaths::ProjectDir(), *ReportFolderName );
 }
 
-FString ALevelStatsCollector::GetCurrentCellPath() const
+FString ALevelStatsCollector::GetScreenshotPath() const
 {
-    return FString::Printf( TEXT( "%sCell_%d/" ), *GetBasePath(), CurrentCellIndex );
-}
-
-FString ALevelStatsCollector::GetCurrentRotationPath() const
-{
-    return FString::Printf( TEXT( "%sRotation_%.0f/" ), *GetCurrentCellPath(), CurrentRotation );
+    return FString::Printf( TEXT( "%sscreenshot_cell%d_rotation_%.0f.png" ), *GetBasePath(), CurrentCellIndex, CurrentRotation );
 }
 
 FString ALevelStatsCollector::GetJsonOutputPath() const

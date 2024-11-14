@@ -25,11 +25,13 @@ private:
     {
         explicit FGridCell( const FVector & center = FVector::ZeroVector ) :
             Center( center ),
-            GroundHeight( 0.0f )
+            GroundHeight( 0.0f ),
+            CameraHeight( 0.0f )
         {}
 
         FVector Center;
         float GroundHeight;
+        float CameraHeight;
     };
 
     FVector GridCenterOffset;

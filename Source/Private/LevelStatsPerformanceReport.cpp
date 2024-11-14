@@ -21,7 +21,7 @@ void FLevelStatsPerformanceReport::Initialize( const UWorld * world, const FLeve
     CaptureReport->SetArrayField( TEXT( "Cells" ), TArray< TSharedPtr< FJsonValue > >() );
 }
 
-void FLevelStatsPerformanceReport::StartNewCell( const int32 cell_index, const FVector & center, const float ground_height )
+void FLevelStatsPerformanceReport::StartNewCell( const int32 cell_index, const FVector & center, const float ground_height, const float actor_height )
 {
     CurrentCellObject = MakeShared< FJsonObject >();
 
@@ -32,17 +32,16 @@ void FLevelStatsPerformanceReport::StartNewCell( const int32 cell_index, const F
     position_object->SetNumberField( TEXT( "Y" ), center.Y );
     position_object->SetNumberField( TEXT( "Z" ), center.Z );
     position_object->SetNumberField( TEXT( "GroundHeight" ), ground_height );
+    position_object->SetNumberField( TEXT( "ActorHeight" ), actor_height );
     CurrentCellObject->SetObjectField( TEXT( "Position" ), position_object );
 
     CurrentCellObject->SetArrayField( TEXT( "Rotations" ), TArray< TSharedPtr< FJsonValue > >() );
 }
 
 void FLevelStatsPerformanceReport::AddRotationData(
-    const int32 cell_index,
     const float rotation,
     const FStringView screenshot_path,
-    const TSharedPtr< FJsonObject > & metrics,
-    const FStringView output_path ) const
+    const TSharedPtr< FJsonObject > & metrics ) const
 {
     const auto rotation_object = MakeShared< FJsonObject >();
     rotation_object->SetNumberField( TEXT( "Angle" ), rotation );
@@ -55,19 +54,6 @@ void FLevelStatsPerformanceReport::AddRotationData(
         rotations.Add( MakeShared< FJsonValueObject >( rotation_object ) );
         CurrentCellObject->SetArrayField( TEXT( "Rotations" ), rotations );
     }
-
-    const auto position_obj = CurrentCellObject->GetObjectField( TEXT( "Position" ) );
-    const auto rotation_report = CreateRotationReport(
-        cell_index,
-        rotation,
-        position_obj->GetNumberField( TEXT( "X" ) ),
-        position_obj->GetNumberField( TEXT( "Y" ) ),
-        position_obj->GetNumberField( TEXT( "Z" ) ),
-        position_obj->GetNumberField( TEXT( "GroundHeight" ) ),
-        screenshot_path,
-        metrics );
-
-    SaveJsonToFile( rotation_report, FString::Printf( TEXT( "%smetrics.json" ), *FString( output_path ) ) );
 }
 
 void FLevelStatsPerformanceReport::FinishCurrentCell()

@@ -64,8 +64,7 @@ private:
     TOptional< FVector > TraceGroundPosition( const FVector & start_location ) const;
 
     FString GetBasePath() const;
-    FString GetCurrentCellPath() const;
-    FString GetCurrentRotationPath() const;
+    FString GetScreenshotPath() const;
     FString GetJsonOutputPath() const;
 
     UPROPERTY()
