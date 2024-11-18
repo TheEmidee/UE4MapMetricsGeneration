@@ -2,6 +2,7 @@
 
 #include <CoreMinimal.h>
 
+class FPerformanceMetricsCapture;
 class ALevelStatsCollector;
 
 class FLevelStatsCollectorState
@@ -39,19 +40,24 @@ public:
     void Enter() override;
     void Tick( float delta_time ) override;
     void Exit() override;
+    static TFuture< bool > CaptureAndSaveAsync( UTextureRenderTarget2D * render_target, const FString & output_path );
 
 private:
     float CurrentDelay;
+    USceneCaptureComponent2D * CaptureComponent;
+    int32 CurrentCellIndex;
 };
 
 class FProcessingNextRotationState final : public FLevelStatsCollectorState
 {
 public:
-    explicit FProcessingNextRotationState( ALevelStatsCollector * collector );
-
     void Enter() override;
+    explicit FProcessingNextRotationState( ALevelStatsCollector * collector );
     void Tick( float delta_time ) override;
     void Exit() override;
+
+private:
+    float CurrentRotation;
 };
 
 class FProcessingNextCellState final : public FLevelStatsCollectorState
@@ -74,5 +80,8 @@ public:
     void Exit() override;
 
 private:
+    TSharedPtr< FPerformanceMetricsCapture > CurrentPerformanceChart;
     float CurrentCaptureTime;
+    int32 CurrentCellIndex;
+    float CurrentRotation;
 };

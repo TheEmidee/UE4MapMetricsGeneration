@@ -1,21 +1,37 @@
 ﻿#pragma once
 
+#include "LevelStatsGridConfiguration.h"
+#include "LevelStatsPerformanceReport.h"
+
 #include <ChartCreation.h>
 #include <CoreMinimal.h>
 
 #include "LevelStatsCollector.generated.h"
 
 class FLevelStatsCollectorState;
+class FJsonObject;
 
-class FCustomPerformanceChart final : public FPerformanceTrackingChart
+struct FLevelStatsSettings
+{
+    float CameraHeight;
+    float CameraHeightOffset;
+    float CameraRotationDelta;
+    float CaptureDelay;
+    float MetricsDuration;
+    float MetricsWaitDelay;
+    float CellSize;
+    FVector GridCenterOffset;
+};
+
+class FPerformanceMetricsCapture final : public FPerformanceTrackingChart
 {
 public:
-    FCustomPerformanceChart( const FDateTime & start_time, FStringView chart_label, FStringView output_path );
-    void DumpFPSChartToCustomLocation( FStringView map_name );
+    FPerformanceMetricsCapture( const FDateTime & start_time, const FStringView chart_label );
+    TSharedPtr< FJsonObject > GetMetricsJson() const;
+    void CaptureMetrics() const;
 
 private:
-    static FString CreateFileNameForChart( FStringView chart_type, FStringView in_map_name, FStringView file_extension );
-    FString CustomOutputPath;
+    TSharedPtr< FJsonObject > MetricsObject;
 };
 
 DECLARE_LOG_CATEGORY_EXTERN( LogLevelStatsCollector, Log, All );
@@ -39,68 +55,48 @@ public:
     void Tick( float delta_time ) override;
 
     void TransitionToState( const TSharedPtr< FLevelStatsCollectorState > & new_state );
+    const FLevelStatsSettings & GetSettings() const;
 
 private:
-    void UpdateRotation();
-    void IncrementCellIndex();
-    void FinishCapture();
-
-    void StartMetricsCapture();
-    void FinishMetricsCapture();
-    void CaptureCurrentView();
     bool ProcessNextCell();
-
     void InitializeGrid();
     void SetupSceneCapture() const;
     TOptional< FVector > TraceGroundPosition( const FVector & start_location ) const;
-    void CalculateGridBounds();
 
     FString GetBasePath() const;
-    FString GetCurrentCellPath() const;
-    FString GetCurrentRotationPath() const;
-
-    void LogGridInfo() const;
-
-    struct FGridCell
-    {
-        explicit FGridCell( const FVector & center ) :
-            Center( center ),
-            GroundHeight( 0.0f )
-        {}
-
-        FGridCell() :
-            Center( FVector::ZeroVector ),
-            GroundHeight( 0.0f )
-        {}
-
-        FVector Center;
-        float GroundHeight;
-    };
+    FString GetScreenshotPath() const;
+    FString GetJsonOutputPath() const;
 
     UPROPERTY()
     USceneCaptureComponent2D * CaptureComponent;
 
+    FLevelStatsPerformanceReport PerformanceReport;
+    FLevelStatsGridConfiguration GridConfig;
+    FLevelStatsSettings Settings;
+    FString ReportFolderName;
+
     TSharedPtr< FLevelStatsCollectorState > CurrentState;
-    TSharedPtr< FCustomPerformanceChart > CurrentPerformanceChart;
-    TArray< FGridCell > GridCells;
-    FVector GridCenterOffset;
+
     int32 TotalCaptureCount;
     int32 CurrentCellIndex;
-    FIntPoint GridDimensions;
-    FBox GridBounds;
-
-    float MetricsDuration;
-    float MetricsWaitDelay;
-    float GridSizeX;
-    float GridSizeY;
-    float CellSize;
-    float CameraHeight;
-    float CameraHeightOffset;
-    float CameraRotationDelta;
-    float CaptureDelay;
     float CurrentRotation;
     float CurrentCaptureDelay;
-
     bool bIsCapturing;
     bool bIsInitialized;
 };
+
+FORCEINLINE FPerformanceMetricsCapture::FPerformanceMetricsCapture( const FDateTime & start_time, const FStringView chart_label ) :
+    FPerformanceTrackingChart( start_time, FString( chart_label ) )
+{
+    MetricsObject = MakeShared< FJsonObject >();
+}
+
+FORCEINLINE TSharedPtr< FJsonObject > FPerformanceMetricsCapture::GetMetricsJson() const
+{
+    return MetricsObject;
+}
+
+FORCEINLINE const FLevelStatsSettings & ALevelStatsCollector::GetSettings() const
+{
+    return Settings;
+}
