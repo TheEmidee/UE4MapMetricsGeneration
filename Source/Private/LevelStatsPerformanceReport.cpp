@@ -1,6 +1,7 @@
 ﻿#include "LevelStatsPerformanceReport.h"
 
 #include "LevelStatsCollector.h"
+#include "LevelStatsPerformanceThresholds.h"
 
 void FLevelStatsPerformanceReport::Initialize( const UWorld * world, const FLevelStatsSettings & settings )
 {
@@ -18,6 +19,17 @@ void FLevelStatsPerformanceReport::Initialize( const UWorld * world, const FLeve
     settings_object->SetNumberField( TEXT( "MetricsDuration" ), settings.MetricsDuration );
     CaptureReport->SetObjectField( TEXT( "Settings" ), settings_object );
 
+    const auto thresholds_object = MakeShared< FJsonObject >();
+    const auto default_thresholds = FLevelStatsPerformanceThresholds::CreateDefaultThresholds();
+
+    for ( const auto & Threshold : default_thresholds )
+    {
+        thresholds_object->SetObjectField(
+            *Threshold.Key.ToString(),
+            Threshold.Value.ToJson() );
+    }
+
+    CaptureReport->SetObjectField( TEXT( "Thresholds" ), thresholds_object );
     CaptureReport->SetArrayField( TEXT( "Cells" ), TArray< TSharedPtr< FJsonValue > >() );
 }
 
@@ -83,7 +95,7 @@ void FLevelStatsPerformanceReport::FinalizeAndSave( const FStringView base_path,
     CaptureReport->SetStringField( "CaptureEndTime", FDateTime::Now().ToString() );
     CaptureReport->SetNumberField( "TotalCaptureCount", total_captures );
 
-    SaveJsonToFile( CaptureReport, FString::Printf( TEXT( "%scapture_report.json" ), *FString( base_path ) ) );
+    SaveJsonToFile( CaptureReport, FString::Printf( TEXT( "%sdata.json" ), *FString( base_path ) ) );
 }
 
 void FLevelStatsPerformanceReport::SaveJsonToFile( const TSharedPtr< FJsonObject > & json_object, const FStringView path ) const
