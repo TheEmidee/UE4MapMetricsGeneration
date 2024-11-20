@@ -64,7 +64,7 @@ FORCEINLINE FLevelStatsPerformanceThresholds FLevelStatsPerformanceThresholds::C
     return FLevelStatsPerformanceThresholds( name,
         Thresholds::EEvaluator::LessThanOrEqual,
         Thresholds::FThresholdValues( 50.0f, 30.0f, 15.0f ),
-        TEXT( "ms" ) );
+        TEXT( "%" ) );
 }
 
 FORCEINLINE FLevelStatsPerformanceThresholds FLevelStatsPerformanceThresholds::CreateMemoryThreshold( const FName name )
