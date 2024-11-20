@@ -16,7 +16,8 @@ namespace UnrealBuildTool.Rules
                     "TargetPlatform",
                     "AssetRegistry",
                     "Json",
-                    "Niagara"
+                    "Niagara",
+                    "ImageCore"
                 }
             );
 
