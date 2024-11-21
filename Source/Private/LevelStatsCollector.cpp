@@ -243,25 +243,9 @@ FString ALevelStatsCollector::GetJsonOutputPath() const
     return GetBasePath() + TEXT( "capture_report.json" );
 }
 
-// void ALevelStatsCollector::LogGridInfo() const
-// {
-//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "Grid Configuration:" ) );
-//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Bounds: Min(%s), Max(%s)" ), *GridBounds.Min.ToString(), *GridBounds.Max.ToString() );
-//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Dimensions: %dx%d cells" ), GridDimensions.X, GridDimensions.Y );
-//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Cell Size: %f" ), Settings.CellSize );
-//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Total Cells: %d" ), GridCells.Num() );
-//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Center Offset: %s" ), *GridCenterOffset.ToString() );
-//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "Camera Configuration:" ) );
-//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Height: %f" ), Settings.CameraHeight );
-//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Height Offset: %f" ), Settings.CameraHeightOffset );
-//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Rotation Delta: %f" ), Settings.CameraRotationDelta );
-//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "Capture Configuration:" ) );
-//     UE_LOG( LogLevelStatsCollector, Log, TEXT( "  Capture Delay: %f" ), Settings.CaptureDelay );
-// }
-
-// :NOTE: This is just an example of several metrics that can be captured -- To be deleted in the future
+// :NOTE: This is just an example of several metrics that can be captured — To be deleted in the future
 /*
-   void CaptureMetrics() const
+void FPerformanceMetricsCapture::CaptureMetrics() const
 {
     // Basic metrics (existing)
     MetricsObject->SetNumberField("AverageFramerate", GetAverageFramerate());

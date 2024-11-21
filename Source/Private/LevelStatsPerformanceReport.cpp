@@ -86,39 +86,6 @@ void FLevelStatsPerformanceReport::FinalizeAndSave( const FStringView base_path,
     SaveJsonToFile( CaptureReport, FString::Printf( TEXT( "%scapture_report.json" ), *FString( base_path ) ) );
 }
 
-TSharedPtr< FJsonObject > FLevelStatsPerformanceReport::CreateRotationReport(
-    const int32 cell_index,
-    const float rotation,
-    const float pos_x,
-    const float pos_y,
-    const float pos_z,
-    const float ground_height,
-    FStringView screenshot_path,
-    const TSharedPtr< FJsonObject > & metrics ) const
-{
-    const auto rotation_report = MakeShared< FJsonObject >();
-
-    rotation_report->SetStringField( TEXT( "CaptureTime" ), FDateTime::Now().ToString() );
-    rotation_report->SetNumberField( TEXT( "CellIndex" ), cell_index );
-    rotation_report->SetNumberField( TEXT( "Rotation" ), rotation );
-
-    const auto position_object = MakeShared< FJsonObject >();
-    position_object->SetNumberField( TEXT( "X" ), pos_x );
-    position_object->SetNumberField( TEXT( "Y" ), pos_y );
-    position_object->SetNumberField( TEXT( "Z" ), pos_z );
-    position_object->SetNumberField( TEXT( "GroundHeight" ), ground_height );
-    rotation_report->SetObjectField( TEXT( "CellPosition" ), position_object );
-
-    rotation_report->SetStringField( TEXT( "Screenshot" ), FString( screenshot_path ) );
-
-    if ( metrics.IsValid() )
-    {
-        rotation_report->SetObjectField( TEXT( "Metrics" ), metrics );
-    }
-
-    return rotation_report;
-}
-
 void FLevelStatsPerformanceReport::SaveJsonToFile( const TSharedPtr< FJsonObject > & json_object, const FStringView path ) const
 {
     FString output_string;
