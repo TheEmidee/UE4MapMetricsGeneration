@@ -4,7 +4,10 @@
 
 #include <Components/SceneCaptureComponent2D.h>
 #include <Engine/TextureRenderTarget2D.h>
+#include <IImageWrapper.h>
+#include <IImageWrapperModule.h>
 #include <ImageUtils.h>
+#include <Modules/ModuleManager.h>
 
 FLevelStatsCollectorState::FLevelStatsCollectorState( ALevelStatsCollector * collector ) :
     Collector( collector )
@@ -127,8 +130,57 @@ TFuture< bool > FWaitingForSnapshotState::CaptureAndSaveAsync( UTextureRenderTar
         return MakeFulfilledPromise< bool >( false ).GetFuture();
     }
 
-    return Async( EAsyncExecution::ThreadPool, [ image = MoveTemp( image ), output_path ] {
-        return FImageUtils::SaveImageByExtension( *output_path, image );
+    return Async( EAsyncExecution::ThreadPool, [ image = MoveTemp( image ), output_path ]() mutable {
+        FImage resized_image;
+
+        constexpr auto new_width = 1280;
+        constexpr auto new_height = 720;
+
+        ResizeImageAllocDest(
+            image,
+            resized_image,
+            new_width,
+            new_height,
+            ERawImageFormat::BGRA8,
+            EGammaSpace::sRGB,
+            FImageCore::EResizeImageFilter::AdaptiveSmooth );
+
+        auto & image_wrapper_module = FModuleManager::LoadModuleChecked< IImageWrapperModule >( TEXT( "ImageWrapper" ) );
+        const TSharedPtr< IImageWrapper > image_wrapper = image_wrapper_module.CreateImageWrapper( EImageFormat::PNG );
+        const auto stride = resized_image.SizeX * 4;
+
+        if ( !image_wrapper.IsValid() )
+        {
+            UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to create image wrapper" ) );
+            return false;
+        }
+
+        if ( !image_wrapper->SetRaw(
+                 resized_image.RawData.GetData(),
+                 resized_image.RawData.Num(),
+                 resized_image.SizeX,
+                 resized_image.SizeY,
+                 ERGBFormat::BGRA,
+                 8,
+                 stride ) )
+        {
+            UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to set raw image data." ) );
+            return false;
+        }
+
+        const TArray64< uint8 > & png_data = image_wrapper->GetCompressed();
+        if ( png_data.Num() == 0 )
+        {
+            UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to compress image data" ) );
+            return false;
+        }
+
+        if ( !FFileHelper::SaveArrayToFile( png_data, *output_path ) )
+        {
+            UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to save file: %s" ), *output_path );
+            return false;
+        }
+        return true;
     } );
 }
 
