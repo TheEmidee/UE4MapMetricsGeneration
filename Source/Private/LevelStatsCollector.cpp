@@ -6,7 +6,6 @@
 #include <Components/SceneCaptureComponent2D.h>
 #include <Dom/JsonObject.h>
 #include <Engine/Engine.h>
-#include <Engine/SceneCapture2D.h>
 #include <Engine/TextureRenderTarget2D.h>
 #include <ImageUtils.h>
 #include <WorldPartition/WorldPartitionMiniMapHelper.h>
