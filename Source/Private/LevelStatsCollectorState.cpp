@@ -232,6 +232,7 @@ void FProcessingNextCellState::Tick( float delta_time )
     else
     {
         Collector->bIsCapturing = false;
+        Collector->CaptureTopDownMapView();
         UE_LOG( LogLevelStatsCollector, Log, TEXT( "Capture process complete! Total captures: %d" ), Collector->TotalCaptureCount );
     }
 }

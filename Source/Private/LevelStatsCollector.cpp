@@ -6,7 +6,10 @@
 #include <Components/SceneCaptureComponent2D.h>
 #include <Dom/JsonObject.h>
 #include <Engine/Engine.h>
+#include <Engine/SceneCapture2D.h>
 #include <Engine/TextureRenderTarget2D.h>
+#include <ImageUtils.h>
+#include <WorldPartition/WorldPartitionMiniMapHelper.h>
 
 DEFINE_LOG_CATEGORY( LogLevelStatsCollector );
 
@@ -83,13 +86,12 @@ ALevelStatsCollector::ALevelStatsCollector() :
     CurrentCaptureDelay( 0.0f ),
     bIsCapturing( false ),
     bIsInitialized( false )
-
 {
     Settings.CameraHeight = 10000.0f;
     Settings.CameraHeightOffset = 250.0f;
     Settings.CameraRotationDelta = 90.0f;
     Settings.CaptureDelay = 0.1f;
-    Settings.MetricsDuration = 2.0f;
+    Settings.MetricsDuration = 1.0f;
     Settings.MetricsWaitDelay = 1.0f;
     Settings.CellSize = 10000.0f;
     Settings.GridCenterOffset = FVector::ZeroVector;
@@ -226,6 +228,46 @@ TOptional< FVector > ALevelStatsCollector::TraceGroundPosition( const FVector & 
     }
 
     return TOptional< FVector >();
+}
+
+void ALevelStatsCollector::CaptureTopDownMapView()
+{
+    const FString base_path = GetBasePath();
+    IFileManager::Get().MakeDirectory( *base_path, true );
+    UTexture2D * overview_texture = nullptr;
+
+    FWorldPartitionMiniMapHelper::CaptureBoundsMiniMapToTexture(
+        GetWorld(),
+        this,
+        2048,
+        2048,
+        overview_texture,
+        TEXT( "MiniMapOverview" ),
+        GridConfig.GridBounds,
+        SCS_FinalColorLDR,
+        10 );
+
+    if ( !overview_texture )
+    {
+        UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to capture overview texture" ) );
+        return;
+    }
+
+    FImage image;
+    if ( !FImageUtils::GetTexture2DSourceImage( overview_texture, image ) )
+    {
+        UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to get texture source image" ) );
+        return;
+    }
+
+    const FString output_path = base_path + TEXT( "map.png" );
+    if ( !FImageUtils::SaveImageByExtension( *output_path, image ) )
+    {
+        UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to save overview map to: %s" ), *output_path );
+        return;
+    }
+
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "Successfully saved overview map to: %s" ), *output_path );
 }
 
 FString ALevelStatsCollector::GetBasePath() const

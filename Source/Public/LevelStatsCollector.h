@@ -63,6 +63,8 @@ private:
     void SetupSceneCapture() const;
     TOptional< FVector > TraceGroundPosition( const FVector & start_location ) const;
 
+    void CaptureTopDownMapView();
+
     FString GetBasePath() const;
     FString GetScreenshotPath() const;
     FString GetJsonOutputPath() const;
