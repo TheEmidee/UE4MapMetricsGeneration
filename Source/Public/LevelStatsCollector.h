@@ -68,6 +68,7 @@ private:
     FString GetBasePath() const;
     FString GetScreenshotPath() const;
     FString GetJsonOutputPath() const;
+    void DrawGridDebug() const;
 
     UPROPERTY()
     USceneCaptureComponent2D * CaptureComponent;

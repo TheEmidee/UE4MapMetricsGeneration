@@ -181,7 +181,8 @@ bool ALevelStatsCollector::ProcessNextCell()
 
 void ALevelStatsCollector::InitializeGrid()
 {
-    GridConfig.Initialize( Settings.GridCenterOffset, Settings.CellSize );
+    // :NOTE: Add GridSize in the future as an optional param
+    GridConfig.Initialize( Settings.GridCenterOffset, Settings.CellSize ); 
     GridConfig.CalculateBounds( GetWorld() );
     GridConfig.GenerateCells();
 
@@ -235,6 +236,8 @@ void ALevelStatsCollector::CaptureTopDownMapView()
     IFileManager::Get().MakeDirectory( *base_path, true );
     UTexture2D * overview_texture = nullptr;
 
+    DrawGridDebug();
+
     FWorldPartitionMiniMapHelper::CaptureBoundsMiniMapToTexture(
         GetWorld(),
         this,
@@ -282,6 +285,31 @@ FString ALevelStatsCollector::GetScreenshotPath() const
 FString ALevelStatsCollector::GetJsonOutputPath() const
 {
     return GetBasePath() + TEXT( "capture_report.json" );
+}
+
+void ALevelStatsCollector::DrawGridDebug() const
+{
+
+    constexpr auto grid_debug_lifetime = 2.0f;
+    constexpr auto line_thickness = 30.0f;
+    const auto grid_color = FColor::White;
+    constexpr auto line_height = 8200.0f;
+
+    for ( auto x = 0; x <= GridConfig.GridDimensions.X; x++ )
+    {
+        const auto line_x = GridConfig.GridBounds.Min.X + ( x * Settings.CellSize );
+        const FVector LineStart( line_x, GridConfig.GridBounds.Min.Y, line_height );
+        const FVector LineEnd( line_x, GridConfig.GridBounds.Max.Y, line_height );
+        DrawDebugLine( GetWorld(), LineStart, LineEnd, grid_color, true, grid_debug_lifetime, 0, line_thickness );
+    }
+
+    for ( auto y = 0; y <= GridConfig.GridDimensions.Y; y++ )
+    {
+        const auto line_y = GridConfig.GridBounds.Min.Y + ( y * Settings.CellSize );
+        const FVector LineStart( GridConfig.GridBounds.Min.X, line_y, line_height );
+        const FVector LineEnd( GridConfig.GridBounds.Max.X, line_y, line_height );
+        DrawDebugLine( GetWorld(), LineStart, LineEnd, grid_color, false, grid_debug_lifetime, 0, line_thickness );
+    }
 }
 
 // :NOTE: This is just an example of several metrics that can be captured — To be deleted in the future
