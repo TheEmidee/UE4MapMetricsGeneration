@@ -7,6 +7,8 @@
 #include <Dom/JsonObject.h>
 #include <Engine/Engine.h>
 #include <Engine/TextureRenderTarget2D.h>
+#include <ImageUtils.h>
+#include <WorldPartition/WorldPartitionMiniMapHelper.h>
 
 DEFINE_LOG_CATEGORY( LogLevelStatsCollector );
 
@@ -83,13 +85,12 @@ ALevelStatsCollector::ALevelStatsCollector() :
     CurrentCaptureDelay( 0.0f ),
     bIsCapturing( false ),
     bIsInitialized( false )
-
 {
     Settings.CameraHeight = 10000.0f;
     Settings.CameraHeightOffset = 250.0f;
     Settings.CameraRotationDelta = 90.0f;
     Settings.CaptureDelay = 0.1f;
-    Settings.MetricsDuration = 2.0f;
+    Settings.MetricsDuration = 1.0f;
     Settings.MetricsWaitDelay = 1.0f;
     Settings.CellSize = 10000.0f;
     Settings.GridCenterOffset = FVector::ZeroVector;
@@ -180,7 +181,8 @@ bool ALevelStatsCollector::ProcessNextCell()
 
 void ALevelStatsCollector::InitializeGrid()
 {
-    GridConfig.Initialize( Settings.GridCenterOffset, Settings.CellSize );
+    // :NOTE: Add GridSize in the future as an optional param
+    GridConfig.Initialize( Settings.GridCenterOffset, Settings.CellSize ); 
     GridConfig.CalculateBounds( GetWorld() );
     GridConfig.GenerateCells();
 
@@ -228,6 +230,48 @@ TOptional< FVector > ALevelStatsCollector::TraceGroundPosition( const FVector & 
     return TOptional< FVector >();
 }
 
+void ALevelStatsCollector::CaptureTopDownMapView()
+{
+    const auto base_path = GetBasePath();
+    IFileManager::Get().MakeDirectory( *base_path, true );
+    UTexture2D * overview_texture = nullptr;
+
+    DrawGridDebug();
+
+    FWorldPartitionMiniMapHelper::CaptureBoundsMiniMapToTexture(
+        GetWorld(),
+        this,
+        2048,
+        2048,
+        overview_texture,
+        TEXT( "MiniMapOverview" ),
+        GridConfig.GridBounds,
+        SCS_FinalColorLDR,
+        10 );
+
+    if ( !overview_texture )
+    {
+        UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to capture overview texture" ) );
+        return;
+    }
+
+    FImage image;
+    if ( !FImageUtils::GetTexture2DSourceImage( overview_texture, image ) )
+    {
+        UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to get texture source image" ) );
+        return;
+    }
+
+    const auto output_path = base_path + TEXT( "map.png" );
+    if ( !FImageUtils::SaveImageByExtension( *output_path, image ) )
+    {
+        UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to save overview map to: %s" ), *output_path );
+        return;
+    }
+
+    UE_LOG( LogLevelStatsCollector, Log, TEXT( "Successfully saved overview map to: %s" ), *output_path );
+}
+
 FString ALevelStatsCollector::GetBasePath() const
 {
     return FString::Printf( TEXT( "%sSaved/LevelStatsCollector/%s/" ), *FPaths::ProjectDir(), *ReportFolderName );
@@ -241,6 +285,31 @@ FString ALevelStatsCollector::GetScreenshotPath() const
 FString ALevelStatsCollector::GetJsonOutputPath() const
 {
     return GetBasePath() + TEXT( "capture_report.json" );
+}
+
+void ALevelStatsCollector::DrawGridDebug() const
+{
+
+    constexpr auto grid_debug_lifetime = 2.0f;
+    constexpr auto line_thickness = 30.0f;
+    const auto grid_color = FColor::White;
+    constexpr auto line_height = 8200.0f;
+
+    for ( auto x = 0; x <= GridConfig.GridDimensions.X; x++ )
+    {
+        const auto line_x = GridConfig.GridBounds.Min.X + ( x * Settings.CellSize );
+        const FVector LineStart( line_x, GridConfig.GridBounds.Min.Y, line_height );
+        const FVector LineEnd( line_x, GridConfig.GridBounds.Max.Y, line_height );
+        DrawDebugLine( GetWorld(), LineStart, LineEnd, grid_color, true, grid_debug_lifetime, 0, line_thickness );
+    }
+
+    for ( auto y = 0; y <= GridConfig.GridDimensions.Y; y++ )
+    {
+        const auto line_y = GridConfig.GridBounds.Min.Y + ( y * Settings.CellSize );
+        const FVector LineStart( GridConfig.GridBounds.Min.X, line_y, line_height );
+        const FVector LineEnd( GridConfig.GridBounds.Max.X, line_y, line_height );
+        DrawDebugLine( GetWorld(), LineStart, LineEnd, grid_color, false, grid_debug_lifetime, 0, line_thickness );
+    }
 }
 
 // :NOTE: This is just an example of several metrics that can be captured — To be deleted in the future
