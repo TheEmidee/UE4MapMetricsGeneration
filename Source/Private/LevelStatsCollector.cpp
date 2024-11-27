@@ -232,7 +232,7 @@ TOptional< FVector > ALevelStatsCollector::TraceGroundPosition( const FVector & 
 
 void ALevelStatsCollector::CaptureTopDownMapView()
 {
-    const FString base_path = GetBasePath();
+    const auto base_path = GetBasePath();
     IFileManager::Get().MakeDirectory( *base_path, true );
     UTexture2D * overview_texture = nullptr;
 
@@ -262,7 +262,7 @@ void ALevelStatsCollector::CaptureTopDownMapView()
         return;
     }
 
-    const FString output_path = base_path + TEXT( "map.png" );
+    const auto output_path = base_path + TEXT( "map.png" );
     if ( !FImageUtils::SaveImageByExtension( *output_path, image ) )
     {
         UE_LOG( LogLevelStatsCollector, Error, TEXT( "Failed to save overview map to: %s" ), *output_path );
